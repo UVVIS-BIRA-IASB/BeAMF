@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
 
-import BeAMF_function as amf_func
+from . import  BeAMF_function as amf_func
 
 # define constant
 __ra__ = 6.0221367e23

@@ -1,0 +1,11 @@
+# pyproject.toml
+
+[build-system]
+requires = ["setuptools>=45", "setuptools_scm>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+write_to = "BeAMF/_version.py"
+
+#[tool.setuptools]
+#py-modules = [BeAMF]

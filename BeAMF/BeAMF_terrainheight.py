@@ -3,7 +3,7 @@ import numpy as np
 from collections import namedtuple
 from scipy.interpolate import RegularGridInterpolator
 
-import BeAMF_function as amf_func
+from . import BeAMF_function as amf_func
 
 
 def read_thdat(th_file, th_name, th_lon_name, th_lat_name, th_units):

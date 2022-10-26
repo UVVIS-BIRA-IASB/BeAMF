@@ -5,7 +5,7 @@ import calendar
 import bisect
 from scipy.interpolate import RegularGridInterpolator
 import itertools
-import BeAMF_function as amf_func
+from . import BeAMF_function as amf_func
 
 
 # read_alblut: read gridded albedo maps

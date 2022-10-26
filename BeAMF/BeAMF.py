@@ -1,9 +1,11 @@
 #!/usr/bin/env python3.5
+# coding: utf-8
+
 import argparse
 import json
 import time
 # import importlib
-import BeAMF_master as amf
+from . import BeAMF_master as amf
 
 # importlib.reload(amf)
 
@@ -16,8 +18,10 @@ __g__ = 9.80665
 __abc__ = -__g__ / __deltaT__ / __rdry__
 
 
-if __name__ == "__main__":
+# if __name__ == "__main__":
+def cml():
 
+       
     parser = argparse.ArgumentParser(description="Air Mass Factor Calculation")
 
     helpstr = "Configuration file"
