@@ -5,7 +5,7 @@ import calendar
 import bisect
 import datetime as dt
 from scipy.interpolate import RegularGridInterpolator
-from . import BeAMF_function as amf_func
+from . import function as amf_func
 
 
 def read_prodat(info):

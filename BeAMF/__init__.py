@@ -1,11 +1,11 @@
-#!/usr/bin/env python3.5
+#!/usr/bin/env python3
 # coding: utf-8
 
 import argparse
 import json
 import time
 # import importlib
-from . import BeAMF_master as amf
+from . import master as amf
 
 # importlib.reload(amf)
 

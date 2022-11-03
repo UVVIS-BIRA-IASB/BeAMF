@@ -6,13 +6,13 @@ import bisect
 import warnings
 # import importlib
 
-from . import BeAMF_calculation as amf_cal
-from . import BeAMF_terrainheight as amf_th
-from . import BeAMF_albedo as amf_alb
-from . import BeAMF_profile as amf_pro
-from . import BeAMF_output as amf_out
-from . import BeAMF_bc as amf_bc
-from . import BeAMF_function as amf_func
+from . import calculation as amf_cal
+from . import terrainheight as amf_th
+from . import albedo as amf_alb
+from . import profile as amf_pro
+from . import output as amf_out
+from . import bc as amf_bc
+from . import function as amf_func
 
 # importlib.reload(amf_cal)
 # importlib.reload(amf_th)

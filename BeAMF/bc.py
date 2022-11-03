@@ -2,7 +2,7 @@ import numpy as np
 import netCDF4 as nc
 import matplotlib.pyplot as plt
 
-from . import BeAMF_function as amf_func
+from . import function as amf_func
 
 
 __R__ = 6371  # radius of Earth
