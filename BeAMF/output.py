@@ -265,7 +265,7 @@ def write_harp(filename, info, flag, name, out):
         # latitudecorners/longitudecorners
         keys = ["latitudecorners", "longitudecorners"]
         for key in keys:
-            if flag[key] & (len(name[key]) > 0) & (out["key"].size > 0):
+            if flag[key] & (len(name[key]) > 0) & (out[key].size > 0):
                 data[name[key]] = harp.Variable(
                     np.float32(out[key]), ["time", None]
                 )

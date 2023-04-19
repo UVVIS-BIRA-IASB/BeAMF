@@ -1,17 +1,31 @@
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
 
-from . import  function as amf_func
+from . import function as amf_func
 
 # define constant
-__ra__ = 6.0221367e23
+# https://en.wikipedia.org/wiki/Avogadro_constant
+# Avogadro's Number
+__ra__ = 6.02214076e23
+# https://www.sciencedirect.com/topics/earth-and-planetary-sciences/lapse-rate
+# temperature lapse rate in the lower atmosphere (K/m)
 __deltaT__ = 0.0065
-__dryair__ = 28.9644
-__rdry__ = 287.0
+# https://en.wikipedia.org/wiki/Gas_constant
+# gas constant for dry air (J/kg/K)
+__rdry__ = 287.053
+# https://en.wikipedia.org/wiki/Density_of_air
+# molar mass of dry air (g/mol)
+__dryair__ = 28.9652
+# gravitational acceleration (m/s^2)
 __g__ = 9.80665
+# exponent used for surface pressure converson following the hypsometric
+# equation (Wallace and Hobbs, 1977).
 __abc__ = -__g__ / __deltaT__ / __rdry__
-__R__ = 6371  # radius of Earth
-__Hatm__ = 8.5  # effective scale height of the atmosphere
+
+# radius of Earth (km)
+__R__ = 6371
+# effective scale height of the atmosphere
+__Hatm__ = 8.5
 __r__ = __R__ / __Hatm__
 
 
@@ -20,29 +34,28 @@ def collect_cloud_variables(
     inp,
     lut
 ):
-    # cloud fraction (range between 0 and 1)
-    cf = np.float64(inp["cf"])
-    cf[cf > 1] = 1
-    cf[cf < 0] = 0
-    # cloud pressure
-    # within [minimum pressure in LUT, sp]
-    # cp = sp when cf = 0
-    cp = np.float64(inp["cp"])
+    # Input validation
+    assert isinstance(inp, dict), "Input parameters are not a dictionary"
+    assert isinstance(lut, dict), "LUT parameters are not a dictionary"
 
+    # Constants
+    CLOUD_ALBEDO_MAX = 1.0
+    CLOUD_ALBEDO_FIX = 0.8
+    CLOUD_PRESSURE_MIN = lut["var"][1][0]
+
+    # cloud fraction (range between 0 and 1)
+    cf = np.clip(np.float64(inp["cf"]), 0, 1)
+
+    # cloud pressure (within [minimum pressure in LUT, sp])
+    # cp = sp when cf = 0
     sp = np.float64(inp["sp"])
-    cp[(cf > 0) & (cp > sp)] = sp[(cf > 0) & (cp > sp)]
-    cp[(cf > 0) & (cp < lut["var"][1][0])] = lut["var"][1][0]
-    cp[np.isclose(cf, 0)] = sp[np.isclose(cf, 0)]
+    cp = np.clip(np.float64(inp["cp"]), CLOUD_PRESSURE_MIN, sp)
+    cp[cf == 0] = sp[cf == 0]
+
     # cloud top albedo (range between 0 and 1)
     # ca = 0.8 when cf = 0
-    ca = np.float64(inp["ca"])
-
-    ca[ca > 1] = 1.0
-    ca[np.isclose(cf, 0)] = 0.8
-    if np.min(ca[cf > 0]) < 0.0:
-        if info["verbose"]:
-            print("warning: cloud albedo is lower than 0.0, and set as 0.0")
-        ca[ca < 0.0] = 0.0
+    ca = np.clip(np.float64(inp["ca"]), 0, CLOUD_ALBEDO_MAX)
+    ca[cf == 0] = CLOUD_ALBEDO_FIX
 
     # output
     cld = {
@@ -61,7 +74,7 @@ def valid_pixels(
     lut_var,
     cld=[]
 ):
-    # idx0: valid pixel for selected lat/lon/SZA/VZA range
+    # idx0: valid pixels within the selected lat/lon/SZA/VZA range
     # output:
     # idx1: idx0 & variable range from LUT variable &
     # valid cloud retrieval
@@ -73,9 +86,12 @@ def valid_pixels(
             & (var[i] <= np.max(lut_var[i]))
         )
     if cld:
-        idx = idx & np.isfinite(cld["cf"])
-        idx = idx & np.isfinite(cld["cp"])
-        idx = idx & np.isfinite(cld["ca"])
+        idx = (
+            idx
+            & np.isfinite(cld["cf"])
+            & np.isfinite(cld["cp"])
+            & np.isfinite(cld["ca"])
+        )
     assert (np.count_nonzero(np.isnan(var[0][idx])) == 0), (
         "some pressure values are NaN"
         )
@@ -107,11 +123,14 @@ def cal_avk(
     # lut_rad: radiance in LUT sp/sza/vza/raa/alb/var
     # lut_amf: box-AMF in LUT pres/sp/sza/vza/raa/alb/var
     # cloud variables if cldcorr_flag is True
+
     dim = list(pres.shape)
-    assert len(dim) == 2, "len(pres.shape) is not 2"
+    assert len(dim) == 2, "pres must be a 2D array"
+
     # pressure is given at layer bounadry
     # box-AMF is calculated at layer
     dim[1] = dim[1] - 1
+
     # collect valid variables (idx)
     pres = pres[idx]
     sp = sp[idx]
@@ -119,21 +138,19 @@ def cal_avk(
     vza = vza[idx]
     raa = raa[idx]
     nalb = len(alb)  # number of parameters for surface albedo
-    alb1 = []
-    for i in range(nalb):
-        alb1.append(alb[i][idx])
+    alb1 = [alb[i][idx] for i in range(nalb)]
     nvar = len(var)
-    var1 = []
-    for i in range(nvar):
-        var1.append(var[i][idx])
-    assert np.count_nonzero(np.isnan(pres)) == 0, (
-        "pressure for valid pixels is NaN"
-    )
+    var1 = [var[i][idx] for i in range(nvar)]
+
+    assert np.isnan(pres).sum() == 0, "pressure for valid pixels is NaN"
+
     # normalized pressure grid
     pres = pres / sp[:, None]
-    assert (np.min(pres) >= 0) & (np.max(pres) <= 1), (
+
+    assert 0 <= np.min(pres) < np.max(pres) <= 1, (
         "normalized pressure grid is not in range of [0, 1]"
     )
+
     # midpoint of pressure profile
     pres1 = (pres[:, :-1] + pres[:, 1:]) / 2
     # create variables for output
@@ -152,16 +169,13 @@ def cal_avk(
         for i in range(1, nalb):
             ca[i] = np.full_like(ca[0], 0)
         # when cf=0, setting cp=sp and ca=0.8
-        idx1 = np.isclose(cf, 0)
+        idx1 = cf == 0
         cp[idx1] = sp[idx1]
         ca[0][idx1] = 0.8
         # forcing cp<=sp & cp>=0
-        cp[cp >= sp] = sp[cp >= sp]
-        cp[cp < lut_var[1][0]] = lut_var[1][0]
-        cp[cp < 0] = 0
+        cp = np.clip(cp, lut_var[1][0], sp)
         # forcing ca<=1 & ca>=0.4
-        ca[0][ca[0] > 1] = 1
-        ca[0][ca[0] < 0.0] = 0.0
+        ca[0] = np.clip(ca[0], 0, 1)
 
         # cloud in which profile layer
         cldidx = np.full(dim[0], np.nan)
@@ -381,7 +395,8 @@ def cal_amf(
         amf_geo = (2 * __r__ + 1) / (
             np.sqrt((__r__ * inp["cossza"]) ** 2 + 2 * __r__ + 1)
             + __r__ * inp["cossza"]
-        ) + 1 / inp["cosvza"]
+            ) + 1 / inp["cosvza"]
+        # amf_geo = 1 / inp["cossza"] + 1 / inp["cosvza"]
         amf_geo[amf_geo.mask] = np.nan
 
     # temperature correction factor

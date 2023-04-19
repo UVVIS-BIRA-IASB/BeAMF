@@ -21,22 +21,26 @@ __abc__ = -__g__ / __deltaT__ / __rdry__
 # if __name__ == "__main__":
 def cml():
 
-       
-    parser = argparse.ArgumentParser(description="Air Mass Factor Calculation")
+    parser = argparse.ArgumentParser(
+        description="Air Mass Factor Calculation",
+        formatter_class=argparse.RawTextHelpFormatter
+    )
 
-    helpstr = "Configuration file"
+    helpstr = "Filename for configuration data"
     parser.add_argument(
-        "-c", "--config",
+        "-c",
+        "--configuration_file",
         dest="configuration_file",
         required=True,
-        type=str,
         help=helpstr,
+        type=str,
         metavar="FILENAME"
     )
 
-    # 1. Settings
+    # 1. General Settings
     helpstr = "Verbose mode"
     parser.add_argument(
+        "-v",
         "--verbose",
         dest="verbose",
         action="store_true",
@@ -44,17 +48,22 @@ def cml():
         help=helpstr
     )
 
-    # molecular in HARP format
-    helpstr = "Molecular for AMF calculation (NO2, HCHO, SO2, O3, C2H2O2, O4)"
+    # molecule in HARP format
+    helpstr = (
+        "Molecule for AMF calculation:\n"
+        "NO2, HCHO, SO2, O3, CHOCHO, O4"
+    )
     parser.add_argument(
-        "-m", "--molec",
-        dest="molecular",
+        "-m",
+        "--molecule",
+        dest="molecule",
+        choices=["NO2", "HCHO", "SO2", "O3", "CHOCHO", "O4"],
         required=False,
         help=helpstr,
         type=str
     )
 
-    helpstr = "Wavelengths for AMF calculation"
+    helpstr = "Wavelength(s) for AMF calculation"
     parser.add_argument(
         "-w",
         "--wavelength",
@@ -66,9 +75,9 @@ def cml():
     )
 
     helpstr = (
-        "Wavelengths selection flag for multi-wavelength AMF calculation: "
-        "True: for each pixel, AMF is only calculated for selected wv; "
-        "False: AMF is calculate for all wvs"
+        "Wavelength selection flag for multi-wavelength AMF calculation:\n"
+        "False: AMF is calculated for all wvs \n"
+        "True: AMF is only calculated for selected wv for each pixel"
     )
     parser.add_argument(
         "--wvflg",
@@ -88,9 +97,9 @@ def cml():
     )
 
     helpstr = (
-        "Flag for tropospheric AMF calculation"
-        "False: only total AMF "
-        "True: Total/tropospheric/stratospheric AMF"
+        "Flag for tropospheric AMF calculation:\n"
+        "False: Calculate total AMF\n"
+        "True: Calculate total, tropospheric and stratospheric AMF"
     )
     parser.add_argument(
         "--amftropflg",
@@ -109,6 +118,20 @@ def cml():
         help=helpstr
     )
 
+    helpstr = (
+        "Flag for Stratosphere-Troposphere Separation calculation\n"
+        "It will be used when bc_flg=True:\n"
+        "False: Background correction calculation is based on SCD data\n"
+        "True: Background correction calculation is based on SCD/AMFgeo data"
+    )
+    parser.add_argument(
+        "--stsflg",
+        dest="sts_flag",
+        action="store_true",
+        required=False,
+        help=helpstr
+    )
+
     helpstr = "Flag for effective cloud fraction calculation"
     parser.add_argument(
         "--cfflg",
@@ -118,7 +141,14 @@ def cml():
         help=helpstr
     )
 
-    helpstr = "Flag for vertical column density calculation"
+    helpstr = (
+        "Flag for vertical column density conversion\n"
+        "It will be used only for single wavelength AMF calculation under "
+        "two conditions:\n"
+        "1. amftrop_flag=False, calculate total vertical column density\n"
+        "2. amftrop_flag=True and bc_flag=True, calculate total and "
+        "tropospheric vertical column density"
+    )
     parser.add_argument(
         "--vcdflg",
         dest="vcd_flag",
@@ -137,8 +167,8 @@ def cml():
     )
 
     helpstr = (
-        "CF threshold for cloud correction "
-        "(cloud correction is only applied when cf/crf>cfthreshold)"
+        "CF threshold for cloud correction\n"
+        "Cloud correction is only applied when CF>cfthreshold"
     )
     parser.add_argument(
         "--cldcorrcfthld",
@@ -149,21 +179,20 @@ def cml():
     )
 
     helpstr = (
-        "Units for CF threshold for cloud correction: "
-        "0: cloud fraction "
-        "1: cloud radiance fraction"
+        "Units for CF threshold value used in cloud correction:\n"
+        "0: Cloud fraction\n"
+        "1: Cloud radiance fraction (intensity-weighted cloud fraction)"
     )
     parser.add_argument(
         "--cldcorrcfu",
         dest="cldcorr_cfunits",
+        choices=[0, 1],
         required=False,
         help=helpstr,
         type=int
     )
 
-    helpstr = (
-        "Flag for temperature correction for cross section in AMF calculation"
-    )
+    helpstr = "Flag for temperature correction in AMF calculation"
     parser.add_argument(
         "--tcorrflg",
         dest="tcorr_flag",
@@ -173,25 +202,26 @@ def cml():
     )
 
     helpstr = (
-        "Temperature correction mode: "
-        "0: polynomial; "
-        "1: 1 / polynomial; "
-        "2: (tref - tcoeff) / (t - tcoeff); "
-        "3: (t - tcoeff) / (tref - tcoeff); "
+        "Temperature correction mode:\n"
+        "0: Polynomial\n"
+        "1: 1 / polynomial\n"
+        "2: (T_ref - T_coeff) / (T - T_coeff)\n"
+        "3: (T - T_coeff) / (T_ref - T_coeff)"
     )
     parser.add_argument(
-        "-tcorrm",
+        "--tcorrm",
         dest="tcorr_mode",
+        choices=[0, 1, 2, 3],
         required=False,
         help=helpstr,
         type=int,
         nargs="+"
     )
 
-    helpstr = "Coefficients for temperature correction formula"
+    helpstr = "Coefficients used in temperature correction formula"
     parser.add_argument(
-        "--tcorrcoeffs",
-        dest="tcorr_coeffs",
+        "--tcorrtcoeffs",
+        dest="tcorr_tcoeffs",
         required=False,
         help=helpstr,
         type=float,
@@ -199,10 +229,10 @@ def cml():
         action="append"
     )
 
-    helpstr = "Temperature reference for temperature correction mode"
+    helpstr = "Reference temperature used in temperature correction formula"
     parser.add_argument(
-        "--tcorrref",
-        dest="tcorr_ref",
+        "--tcorrtref",
+        dest="tcorr_tref",
         required=False,
         help=helpstr,
         type=float,
@@ -210,9 +240,8 @@ def cml():
     )
 
     helpstr = (
-        "Flag for surface pressure correction (Zhou et al., 2009) "
-        "due to the difference of surface altitude between profile and "
-        "satellite pixels"
+        "Flag to correct surface pressure due to surface altitude difference "
+        "between trace gas profile and satellite pixels (Zhou et al., 2009)"
     )
     parser.add_argument(
         "--spcorrflg",
@@ -223,29 +252,30 @@ def cml():
     )
 
     helpstr = (
-        "Geometry units for box-AMF LUT interpolation: "
-        "0: degree; "
-        "1: cosine of angle"
+        "Units of SZA/VZA for box-AMF LUT interpolation:\n"
+        "0: Degree\n"
+        "1: Cosine of angle"
     )
     parser.add_argument(
         "--geou",
         dest="geo_units",
+        choices=[0, 1],
         required=False,
         help=helpstr,
         type=int
     )
 
     # 1.1 valid data range
-    helpstr = "Minimum SZA (degree)"
+    helpstr = "Minimum SZA (degree) to process AMF calculation"
     parser.add_argument(
         "--szamin",
         dest="sza_min",
         required=False,
         help=helpstr,
-        type=float,
+        type=float
     )
 
-    helpstr = "Maximum SZA (degree)"
+    helpstr = "Maximum SZA (degree) to process AMF calculation"
     parser.add_argument(
         "--szamax",
         dest="sza_max",
@@ -254,7 +284,7 @@ def cml():
         type=float
     )
 
-    helpstr = "Minimum VZA (degree)"
+    helpstr = "Minimum VZA (degree) to process AMF calculation"
     parser.add_argument(
         "--vzamin",
         dest="vza_min",
@@ -263,7 +293,7 @@ def cml():
         type=float
     )
 
-    helpstr = "Maximum VZA (degree)"
+    helpstr = "Maximum VZA (degree) to process AMF calculation"
     parser.add_argument(
         "--vzamax",
         dest="vza_max",
@@ -272,7 +302,7 @@ def cml():
         type=float
     )
 
-    helpstr = "Minimum latitude (degree)"
+    helpstr = "Minimum latitude (degree) to process AMF calculation"
     parser.add_argument(
         "--latmin",
         dest="lat_min",
@@ -281,7 +311,7 @@ def cml():
         type=float
     )
 
-    helpstr = "Maximum latitude (degree)"
+    helpstr = "Maximum latitude (degree) to process AMF calculation"
     parser.add_argument(
         "--latmax",
         dest="lat_max",
@@ -290,7 +320,7 @@ def cml():
         type=float
     )
 
-    helpstr = "Minimum longitude (degree)"
+    helpstr = "Minimum longitude (degree) to process AMF calculation"
     parser.add_argument(
         "--lonmin",
         dest="lon_min",
@@ -299,7 +329,7 @@ def cml():
         type=float
     )
 
-    helpstr = "Maximum longitude (degree)"
+    helpstr = "Maximum longitude (degree) to process AMF calculation"
     parser.add_argument(
         "--lonmax",
         dest="lon_max",
@@ -309,7 +339,7 @@ def cml():
     )
 
     # 2. Input
-    # 2.0 Input for box-AMF data
+    # 2.0 Box-AMF LUT Input
     helpstr = "Filename for box-AMF/radiance LUT"
     parser.add_argument(
         "--lutf",
@@ -339,9 +369,9 @@ def cml():
     )
 
     helpstr = (
-        "List of variable names in LUT file"
-        "including wavelengths / normalized pressure grid / surface pressure"
-        " / SZA / VZA / RAA (except albedo and other parameters)"
+        "List of dimension names in LUT file:\n"
+        "Including (wavelengths), normalized pressure profile, surface "
+        "pressure, SZA, VZA, RAA"
     )
     parser.add_argument(
         "--lutvar",
@@ -352,7 +382,7 @@ def cml():
         nargs="+"
     )
 
-    helpstr = "Variable (albedo) name in LUT file"
+    helpstr = "Dimension (albedo) name(s) in LUT file"
     parser.add_argument(
         "--lutalb",
         dest="lut_alb_name",
@@ -362,7 +392,7 @@ def cml():
         nargs="+"
     )
 
-    helpstr = "variable (the others) name in LUT file"
+    helpstr = "Dimension (other variable) name(s) in LUT file"
     parser.add_argument(
         "--lutother",
         dest="lut_other_name",
@@ -372,13 +402,15 @@ def cml():
         nargs="+"
     )
 
-    # 2.1 General input
+    # 2.1 General Input
     helpstr = (
-        "Input file (such a QDOAS output, Satellite L2 data, "
-        "or general input including geometry, surface albedo, profiles etc)"
+        "Filename(s) for general input:\n"
+        "Such as QDOAS output and satellite L1/L2 data, "
+        "which include geometry, geolocation, time etc."
     )
     parser.add_argument(
-        "-i", "--inpf",
+        "-i",
+        "--inpf",
         dest="inp_file",
         required=False,
         help=helpstr,
@@ -388,33 +420,34 @@ def cml():
     )
 
     helpstr = (
-        "Type of input file: "
-        "0: HARP format; "
-        "1: TROPOMI L2; "
-        "2: OMI L2; "
-        "3: QA4ECV L2; "
-        "4: GOME-2 operational L2; "
-        "9: customized netCDF4 file"
+        "Type of general input file:\n"
+        "0: HARP format\n"
+        "1: TROPOMI L2\n"
+        "2: OMI L2\n"
+        "3: QA4ECV L2\n"
+        "4: GOME-2 operational L2\n"
+        "9: Customized netCDF4 file"
     )
     parser.add_argument(
         "-t",
         "--filetype",
         dest="file_type",
+        choices=[0, 1, 2, 3, 4, 9],
         required=False,
         help=helpstr,
         type=int
     )
 
-    helpstr = "Variable(wavelengths index) name in inp_file"
+    helpstr = "Variable (wavelength index) name in inp_file"
     parser.add_argument(
-        "--wvidxn",
+        "--wvidx",
         dest="wvidx_name",
         required=False,
         help=helpstr,
         type=str
     )
 
-    helpstr = "Variable(slant column density) name in inp_file"
+    helpstr = "Variable (slant column density) name in inp_file"
     parser.add_argument(
         "--scd",
         dest="scd_name",
@@ -423,7 +456,7 @@ def cml():
         type=str
     )
 
-    helpstr = "Variable(intensity) name in inp_file"
+    helpstr = "Variable (intensity) name in inp_file"
     parser.add_argument(
         "--intensity",
         dest="intens_name",
@@ -459,7 +492,7 @@ def cml():
         type=str
     )
 
-    helpstr = "Variable (longitude corner) name in inp_file"
+    helpstr = "Variable (longitude corners) name in inp_file"
     parser.add_argument(
         "--loncor",
         dest="loncor_name",
@@ -468,10 +501,7 @@ def cml():
         type=str
     )
 
-    helpstr = (
-        "Variable (SZA) name in inp_file "
-        "(specify the path for SZA in inp_file)"
-    )
+    helpstr = "Variable (SZA) name in inp_file"
     parser.add_argument(
         "--sza",
         dest="sza_name",
@@ -480,10 +510,7 @@ def cml():
         type=str
     )
 
-    helpstr = (
-        "Variable (VZA) name in inp_file"
-        "(specify the path for VZA in inp_file)"
-    )
+    helpstr = "Variable (VZA) name in inp_file"
     parser.add_argument(
         "--vza",
         dest="vza_name",
@@ -493,10 +520,9 @@ def cml():
     )
 
     helpstr = (
-        "List of variable (RAA) name(s) in inp_file: "
-        "(specify the path for RAA or SAA/VAA in inp_file)"
-        "one string: RAA; "
-        "two strings: SAA and VAA."
+        "List of variable (RAA) name(s) in inp_file:\n"
+        "One string: RAA\n"
+        "Two strings: SAA and VAA"
     )
     parser.add_argument(
         "--raa",
@@ -508,26 +534,29 @@ def cml():
     )
 
     helpstr = (
-        "Mode for RAA: "
-        "0: Relative azimuth angle = 180-RAA or 180-ABS(SAA-VAA); "
-        "1: Relative azimuth angle = RAA or ABS(SAA-VAA)"
+        "Mode for definition of relative azimuth angle in inp_file"
+        "(in order to consistent with the RAA definition in LUT):\n"
+        "0: Relative azimuth angle = 180-RAA or 180-(SAA-VAA)\n"
+        "1: Relative azimuth angle = RAA or SAA-VAA"
     )
     parser.add_argument(
         "--raam",
         dest="raa_mode",
+        choices=[0, 1],
         required=False,
         help=helpstr,
         type=int
     )
 
     helpstr = (
-        "Mode for variable time in inp_file: "
-        "0: Time + TimeDelta"
+        "Mode for measurement time in inp_file:\n"
+        "0: Time + timedelta\n"
         "1: Time"
     )
     parser.add_argument(
         "--timem",
         dest="time_mode",
+        choices=[0, 1],
         required=False,
         help=helpstr,
         type=int
@@ -543,15 +572,16 @@ def cml():
     )
 
     helpstr = (
-        "Units for time in inp_file: "
-        "0: seconds since the reference time;(time_mode=0/1) "
-        "1: days since the reference time;(time_mode=0) "
-        "2: yyyymmdd;(time_mode=0) "
-        "3: year/month/day/hour/minute/second/mirosecond(time_mode=1)"
+        "Units for time in inp_file:\n"
+        "0: Seconds since the reference time (time_mode=0/1)\n"
+        "1: Days since the reference time (time_mode=0)\n"
+        "2: yyyymmdd (time_mode=0)\n"
+        "3: (year,month,day,hour,minute,second,mirosecond) (time_mode=1)"
     )
     parser.add_argument(
         "--timeu",
         dest="time_units",
+        choices=[0, 1, 2, 3],
         required=False,
         help=helpstr,
         type=int
@@ -567,24 +597,25 @@ def cml():
     )
 
     helpstr = (
-        "Units for timedelta in inp_file: "
-        "0: milliseconds;"
-        "1: seconds; "
-        "2: hhmmss"
-        "3: fractional time (days); "
-        "4: fractional time (hours)"
+        "Units for timedelta in inp_file:\n"
+        "0: Milliseconds\n"
+        "1: Seconds\n"
+        "2: hhmmss\n"
+        "3: Fractional time (days)\n"
+        "4: Fractional time (hours)"
     )
     parser.add_argument(
         "--timedeltau",
         dest="timedelta_units",
+        choices=[0, 1, 2, 3, 4],
         required=False,
         help=helpstr,
         type=int
     )
 
     helpstr = (
-        "Reference time for variable time in inp_file: "
-        "(year, month, day)"
+        "Reference for measurement time in inp_file:\n"
+        "year, month, day, (hour, minute, second)"
     )
     parser.add_argument(
         "--timeref",
@@ -595,23 +626,24 @@ def cml():
         nargs="+"
     )
 
-    # 2.2 Input for Terrain Height
+    # 2.2 Terrain Height Input
     helpstr = (
-        "Model for terrain height: "
-        "0: values are directly from th_file; "
-        "1: interpolation from th_file into lat/lon in inp_file"
+        "Mode for terrain height:\n"
+        "0: Values for satellite measurement are directly from th_file\n"
+        "1: Gridded data from th_file, and interpolated into satellite pixels"
     )
     parser.add_argument(
         "--thm",
         dest="th_mode",
+        choices=[0, 1],
         required=False,
         help=helpstr,
         type=int
     )
 
     helpstr = (
-        "Filename for terrain height "
-        "(if not set and th_mode=0, th_file=inp_file)"
+        "Filename(s) for terrain height\n"
+        "If not set and th_mode=0, th_file=inp_file"
     )
     parser.add_argument(
         "--thf",
@@ -633,19 +665,20 @@ def cml():
     )
 
     helpstr = (
-        "Units for terrin height in th_file: "
-        "0: m; "
+        "Units for terrain height in th_file:\n"
+        "0: m\n"
         "1: km"
     )
     parser.add_argument(
         "--thu",
         dest="th_units",
+        choices=[0, 1],
         required=False,
         help=helpstr,
         type=int
     )
 
-    helpstr = "Variable (latitude) name in th_file"
+    helpstr = "Dimension (latitude) name in th_file"
     parser.add_argument(
         "--thlat",
         dest="th_lat_name",
@@ -654,7 +687,7 @@ def cml():
         type=str
     )
 
-    helpstr = "Variable (longitude) name in th_file"
+    helpstr = "Dimension (longitude) name in th_file"
     parser.add_argument(
         "--thlon",
         dest="th_lon_name",
@@ -663,25 +696,29 @@ def cml():
         type=str
     )
 
-    # 2.3 Input for surface albedo
+    # 2.3 Surface Albedo Input
     helpstr = (
-        "Mode for surface albedo data: "
-        "0: directly get from the alb_file; "
-        "1: LER climatology; "
-        "2: LER with VZA dependence; "
-        "3: MODIS-type BRDF"
+        "Mode for surface albedo data:\n"
+        "0: Values for satellite measurement are directly from alb_file\n"
+        "1: Gridded data from alb_file, and interpolated into satellite "
+        "pixels\n"
+        "2: Gridded data with VZA dependence from alb_file, and "
+        "interpolated into satellite pixels\n"
+        "3: Gridded MODIS-type BRDF data\n"
+        "9: OMI LER climatology"
     )
     parser.add_argument(
         "--albm",
         dest="alb_mode",
+        choices=[0, 1, 2, 3, 9],
         required=False,
         help=helpstr,
         type=int
     )
 
     helpstr = (
-        "Filename for surface albedo data "
-        "(if not set and alb_mode=0, alb_file=inp_file)"
+        "Filename(s) for surface albedo data\n"
+        "If not set and alb_mode=0, alb_file=inp_file"
     )
     parser.add_argument(
         "--albf",
@@ -693,7 +730,7 @@ def cml():
         nargs="+"
     )
 
-    helpstr = "Variable (albedo value) name in alb_file"
+    helpstr = "Variable (albedo) name(s) in alb_file"
     parser.add_argument(
         "--alb",
         dest="alb_name",
@@ -703,7 +740,7 @@ def cml():
         nargs="+"
     )
 
-    helpstr = "Scaling factor for albedo value in alb_file"
+    helpstr = "Scaling factor(s) for albedo value in alb_file"
     parser.add_argument(
         "--albfactor",
         dest="alb_factor",
@@ -714,20 +751,21 @@ def cml():
     )
 
     helpstr = (
-        "Mode for time in alb_file: "
-        "0: single (no time dimension); "
-        "1: monthy climatology; "
-        "2: defined by alb_time_name (day of year)"
+        "Mode for time in alb_file:\n"
+        "0: Single (no time dimension)\n"
+        "1: Monthy climatology\n"
+        "2: Defined by alb_time_name (days of year)"
     )
     parser.add_argument(
         "--albtimem",
         dest="alb_time_mode",
+        choices=[0, 1, 2],
         required=False,
         help=helpstr,
         type=int
     )
 
-    helpstr = "Variable (time) in alb_file"
+    helpstr = "Dimension (time) name in alb_file"
     parser.add_argument(
         "--albtime",
         dest="alb_time_name",
@@ -736,7 +774,7 @@ def cml():
         type=str
     )
 
-    helpstr = "Variable (latitude) in alb_file"
+    helpstr = "Dimension (latitude) name in alb_file"
     parser.add_argument(
         "--alblat",
         dest="alb_lat_name",
@@ -745,7 +783,7 @@ def cml():
         type=str
     )
 
-    helpstr = "Variable (longitude) in alb_file"
+    helpstr = "Dimension (longitude) name in alb_file"
     parser.add_argument(
         "--alblon",
         dest="alb_lon_name",
@@ -754,9 +792,9 @@ def cml():
         type=str
     )
 
-    helpstr = "Variable (wavelengths) in alb_file"
+    helpstr = "Dimension (wavelength) name in alb_file"
     parser.add_argument(
-        "--albwvs",
+        "--albwv",
         dest="alb_wv_name",
         required=False,
         help=helpstr,
@@ -764,13 +802,13 @@ def cml():
     )
 
     helpstr = (
-        "Wavelengths for surface albedo, linear interpolation from "
-        "climatology dataset. (it can be different with the wavelength "
-        "for AMF calculation)"
+        "Wavelength(s) for surface albedo, linear interpolation from "
+        "gridded dataset.\n"
+        "This can be different with the wavelength for AMF calculation"
     )
     parser.add_argument(
-        "--albwv",
-        dest="albwv",
+        "--albwvs",
+        dest="albwvs",
         required=False,
         help=helpstr,
         type=float,
@@ -778,12 +816,12 @@ def cml():
     )
 
     helpstr = (
-        "Whether it is regional albedo map: "
-        "False: global map; "
-        "True: regional map"
+        "Whether it is regional albedo map:\n"
+        "False: Global map\n"
+        "True: Regional map"
     )
     parser.add_argument(
-        "--albregf",
+        "--albregflg",
         dest="alb_region_flag",
         action="store_true",
         required=False,
@@ -791,8 +829,8 @@ def cml():
     )
 
     helpstr = (
-        "Sign for VZA when alb_mode=2: "
-        "False: VZA is negative when RAA>90°; "
+        "Sign for VZA when alb_mode=2:\n"
+        "False: VZA is negative when RAA>90°\n"
         "True: VZA is negative when RAA<90°"
     )
     parser.add_argument(
@@ -803,23 +841,24 @@ def cml():
         help=helpstr
     )
 
-    # 2.4 Input for cloud properties
+    # 2.4 Cloud Input
     helpstr = (
-        "Mode for cloud properties for AMF calculation: "
-        "0: directly using cloud values from the cld_file "
-        "1: ca1=0.8 and cf1=cf*ca/0.8 for AMF calculation"
+        "Mode for cloud data for AMF calculation:\n"
+        "0: Directly use cloud parameters (CF, CP, CA) from cld_file\n"
+        "1: Adjustment CA' = 0.8 and CF' = CF · CA / 0.8 for AMF calculation"
     )
     parser.add_argument(
         "--cldm",
         dest="cld_mode",
+        choices=[0, 1],
         required=False,
         help=helpstr,
         type=int
     )
 
     helpstr = (
-        "Filenames for cloud properties"
-        "(if not set, cld_file=inp_file)"
+        "Filename(s) for cloud data\n"
+        "If not set, cld_file=inp_file"
     )
     parser.add_argument(
         "--cldf",
@@ -831,7 +870,7 @@ def cml():
         nargs="+"
     )
 
-    helpstr = "Variable (cloud fraction) in the cld_file"
+    helpstr = "Variable (cloud fraction) in cld_file"
     parser.add_argument(
         "--cf",
         dest="cf_name",
@@ -840,7 +879,7 @@ def cml():
         type=str
     )
 
-    helpstr = "Variable (cloud pressure) in the cld_file"
+    helpstr = "Variable (cloud pressure) in cld_file"
     parser.add_argument(
         "--cp",
         dest="cp_name",
@@ -850,21 +889,22 @@ def cml():
     )
 
     helpstr = (
-        "Units for cloud pressure in the cld_file:"
-        "0: Pa; "
+        "Units for cloud pressure in cld_file:\n"
+        "0: Pa\n"
         "1: hPa"
     )
     parser.add_argument(
         "--cpu",
         dest="cp_units",
+        choices=[0, 1],
         required=False,
         help=helpstr,
         type=int
     )
 
     helpstr = (
-        "Variable (cloud albedo) in the cld_file "
-        "(if no set, the default value is 0.8)"
+        "Variable (cloud albedo) in cld_file\n"
+        "If no set, use the default value 0.8"
     )
     parser.add_argument(
         "--ca",
@@ -874,27 +914,27 @@ def cml():
         type=str
     )
 
-    # 2.5 Input for profiles
+    # 2.5 Profile Input
     helpstr = (
-        "Mode of profile file: "
-        "0: values are directly from pro_file; "
-        "1: time series of gridded data interpolation from pro_file "
-        "into lon/lat in inp_file;"
-        "2: the same as 1 but monthly climatology at satellite overpass time"
-        "3: gridded data without time dimension"
+        "Mode of profile file:\n"
+        "0: Values for satellite measurement are directly from pro_file\n"
+        "1: Gridded data from pro_file, and interpolated into satellite "
+        "pixels\n"
+        "2: Same as 1 but monthly climatology at satellite overpass time\n"
+        "3: Gridded data without time dimension"
     )
     parser.add_argument(
         "--prom",
         dest="pro_mode",
+        choices=[0, 1, 2, 3],
         required=False,
         help=helpstr,
         type=int
     )
 
     helpstr = (
-        "Filenames for profile file"
-        "(if not set and pro_mode=0, pro_file=inp_file, "
-        "if pro_mode=1, pro_file is list of files.)"
+        "Filename(s) for profile data\n"
+        "If not set and pro_mode=0, then pro_file=inp_file"
     )
     parser.add_argument(
         "--prof",
@@ -916,13 +956,14 @@ def cml():
     )
 
     helpstr = (
-        "Units for trace gas profile in pro_file: "
-        "0: volume mixing ratio; "
-        "1: columne number density"
+        "Units for trace gas profile in pro_file:\n"
+        "0: Volume mixing ratio\n"
+        "1: Column number density"
     )
     parser.add_argument(
         "--prou",
         dest="pro_units",
+        choices=[0, 1],
         required=False,
         help=helpstr,
         type=int
@@ -938,14 +979,15 @@ def cml():
     )
 
     helpstr = (
-        "Units for temperature profile in pro_file: "
-        "0: Kelvin; "
-        "1: Celsius; "
+        "Units for temperature profile in pro_file:\n"
+        "0: Kelvin\n"
+        "1: Celsius\n"
         "2: Fahrenheit"
     )
     parser.add_argument(
         "--tprou",
         dest="tpro_units",
+        choices=[0, 1, 2],
         required=False,
         help=helpstr,
         type=int
@@ -961,13 +1003,14 @@ def cml():
     )
 
     helpstr = (
-        "Mode for tropopause in pro_file: "
-        "0: layer index; "
-        "1: tropopause pressure(the units is the same as surface pressure)"
+        "Mode for tropopause in pro_file:\n"
+        "0: Layer index\n"
+        "1: Tropopause pressure (the units is the same as surface pressure)"
     )
     parser.add_argument(
         "--protropm",
         dest="tropopause_mode",
+        choices=[0, 1],
         required=False,
         help=helpstr,
         type=int
@@ -983,13 +1026,14 @@ def cml():
     )
 
     helpstr = (
-        "Units for terrain height in pro_file: "
-        "0: m; "
+        "Units for terrain height in pro_file:\n"
+        "0: m\n"
         "1: km"
     )
     parser.add_argument(
         "--prothu",
         dest="pro_th_units",
+        choices=[0, 1],
         required=False,
         help=helpstr,
         type=int
@@ -1005,19 +1049,20 @@ def cml():
     )
 
     helpstr = (
-        "Units for surface pressure in pro_file: "
-        "0: Pa; "
+        "Units for pressure in pro_file:\n"
+        "0: Pa\n"
         "1: hPa"
     )
     parser.add_argument(
         "--prospu",
         dest="pro_sp_units",
+        choices=[0, 1],
         required=False,
         help=helpstr,
         type=int
     )
 
-    helpstr = "Variable (latitude) name in pro_file"
+    helpstr = "Dimension (latitude) name in pro_file"
     parser.add_argument(
         "--prolat",
         dest="pro_lat_name",
@@ -1026,7 +1071,7 @@ def cml():
         type=str
     )
 
-    helpstr = "Variable (longitude) name in pro_file"
+    helpstr = "Dimension (longitude) name in pro_file"
     parser.add_argument(
         "--prolon",
         dest="pro_lon_name",
@@ -1036,18 +1081,19 @@ def cml():
     )
 
     helpstr = (
-        "Mode for time in pro_file: "
+        "Mode for time in pro_file:\n"
         "0: Days since pro_time_reference"
     )
     parser.add_argument(
         "--protimem",
         dest="pro_time_mode",
+        choices=[0],
         required=False,
         help=helpstr,
         type=int
     )
 
-    helpstr = "Variable (time) name in pro_file"
+    helpstr = "Dimension (time) name in pro_file"
     parser.add_argument(
         "--protime",
         dest="pro_time_name",
@@ -1056,7 +1102,10 @@ def cml():
         type=str
     )
 
-    helpstr = "Reference time for time in pro_file"
+    helpstr = (
+        "Reference time for time in pro_file:\n"
+        "year, month, day, (hour, minute, second)"
+    )
     parser.add_argument(
         "--protimeref",
         dest="pro_time_reference",
@@ -1067,13 +1116,16 @@ def cml():
     )
 
     helpstr = (
-        "profile pressure grid mode: "
-        "0: Model level midpoint pressure = a + b * sp; "
-        "1: Pressure (midpoint) grid "
+        "Mode for profile pressure grid:\n"
+        "0: Model layer midpoint pressure = a + b · sp\n"
+        "1: Pressure grid (midpoint)\n"
+        "2: Model layer boundary pressure = a + b · sp\n"
+        "3: Pressure grid (boundary)"
     )
     parser.add_argument(
         "--progridm",
         dest="pro_grid_mode",
+        choices=[0, 1, 2, 3],
         required=False,
         help=helpstr,
         type=int
@@ -1090,12 +1142,12 @@ def cml():
     )
 
     helpstr = (
-        "Whether it is regional profile map: "
-        "False: global map; "
-        "True: regional map"
+        "Whether it is regional profile data:\n"
+        "False: Global map\n"
+        "True: Regional map"
     )
     parser.add_argument(
-        "--proregf",
+        "--proregflg",
         dest="pro_region_flag",
         action="store_true",
         required=False,
@@ -1103,8 +1155,8 @@ def cml():
     )
 
     helpstr = (
-        "Filenames for the other varialbe file"
-        "(if not set, var_file=inp_file) "
+        "Filename(s) for other variable file\n"
+        "If not set, then var_file=inp_file"
     )
     parser.add_argument(
         "--varf",
@@ -1116,7 +1168,7 @@ def cml():
         nargs="+"
     )
 
-    helpstr = "Variable (other variables) name in var_file/inp_file"
+    helpstr = "Variable (other variable) name in var_file/inp_file"
     parser.add_argument(
         "--var",
         dest="var_name",
@@ -1127,24 +1179,24 @@ def cml():
     )
 
     # 3. Background correction
-    helpstr = "Data range (Longitude) for background correction"
+    helpstr = "Data range (longitude) for background correction"
     parser.add_argument(
         "--bclonlim",
         dest="bc_lon_lim",
         required=False,
         help=helpstr,
         type=float,
-        nargs="+"
+        nargs=2
     )
 
-    helpstr = "Data range (Latitude) for background correction"
+    helpstr = "Data range (latitude) for background correction"
     parser.add_argument(
         "--bclatlim",
         dest="bc_lat_lim",
         required=False,
         help=helpstr,
         type=float,
-        nargs="+"
+        nargs=2
     )
 
     helpstr = "Data range (SZA) for background correction"
@@ -1154,7 +1206,7 @@ def cml():
         required=False,
         help=helpstr,
         type=float,
-        nargs="+"
+        nargs=2
     )
 
     helpstr = "Data range (VZA) for background correction"
@@ -1164,16 +1216,19 @@ def cml():
         required=False,
         help=helpstr,
         type=float,
-        nargs="+"
+        nargs=2
     )
 
     helpstr = (
-        "Target parameter for background correction "
-        "(lat, sza or cossza)"
+        "Target parameter used for background correction:\n"
+        "lat\n"
+        "sza\n"
+        "cossza"
     )
     parser.add_argument(
         "--bcvar",
         dest="bc_x_name",
+        choices=["lat", "sza", "cossza"],
         required=False,
         help=helpstr,
         type=str
@@ -1190,8 +1245,8 @@ def cml():
     )
 
     helpstr = (
-        "Lowest number of samples for target parameter in each interval"
-        "for background correction"
+        "Minimum number of samples for target parameter for statistics in "
+        "each interval used for background correction"
     )
     parser.add_argument(
         "--bcvarsample",
@@ -1202,9 +1257,9 @@ def cml():
     )
 
     helpstr = (
-        "Flag to show the background correction result: "
-        "True: show the result of the fitting; "
-        "False: process the AMF calculation"
+        "Flag to show background correction result:\n"
+        "False: Data processing\n"
+        "True: Display fitting result"
     )
     parser.add_argument(
         "--bctestflag",
@@ -1216,38 +1271,41 @@ def cml():
 
     # 4. Output
     helpstr = (
-        "output file type: "
-        "0: HARP format; "
-        "1: TROPOMI format; "
-        "2: OMI format; "
-        "3: QA4ECV format; "
-        "4: GOME-2 operational format; "
-        "9: customized format"
+        "Type of output file:\n"
+        "0: HARP format\n"
+        "1: TROPOMI L2\n"
+        "2: OMI L2\n"
+        "3: QA4ECV L2\n"
+        "4: GOME-2 operational L2\n"
+        "9: Customized netCDF4 file"
     )
     parser.add_argument(
         "--outft",
         dest="out_file_type",
+        choices=[0, 1, 2, 3, 4, 9],
         required=False,
         help=helpstr,
         type=int
     )
 
     helpstr = (
-        "output file mode: "
-        "0: write in an existing file; "
-        "1: create a new file"
+        "Mode for output file:\n"
+        "0: Write in an existing file\n"
+        "1: Write in a new file"
     )
     parser.add_argument(
         "--outfm",
         dest="out_file_mode",
+        choices=[0, 1],
         required=False,
         help=helpstr,
         type=int
     )
 
-    helpstr = "Filenames for output file"
+    helpstr = "Filepath or Filename(s) for output file"
     parser.add_argument(
-        "-o", "--outf",
+        "-o",
+        "--outf",
         dest="out_file",
         required=False,
         help=helpstr,

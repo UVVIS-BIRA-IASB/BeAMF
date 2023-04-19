@@ -1,4 +1,4 @@
-import netCDF4 as nc
+from netCDF4 import Dataset
 import numpy as np
 from collections import namedtuple
 import calendar
@@ -52,10 +52,11 @@ def read_prodat(info):
         ], "1 or 2 pro_file when pro_mode=1"
     # start read pro_file
     for pro_file in info["pro_file"]:
-        with nc.Dataset(pro_file, "r") as fid:
+        with Dataset(pro_file, "r") as fid:
             dimname_lon = fid[info["pro_lon_name"]].dimensions
             dimname_lat = fid[info["pro_lat_name"]].dimensions
             assert len(dimname_lon) == len(dimname_lat) == 1
+            # list --> string
             dimname_lon = dimname_lon[0]
             dimname_lat = dimname_lat[0]
             if info["pro_mode"] in [1, 2]:

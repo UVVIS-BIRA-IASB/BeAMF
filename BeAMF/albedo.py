@@ -1,4 +1,4 @@
-import netCDF4 as nc
+from netCDF4 import Dataset
 import numpy as np
 from collections import namedtuple
 import calendar
@@ -33,11 +33,11 @@ def read_alblut1(info):
         alb_file/alb_name/alb_factor: list with 1 element
         alb_time_name: only set when alb_time_mode>=2
         alb_wv_name: optional dimension
-    output: albwv x time x lon x lat
+    output: albwvs x time x lon x lat
     """
     # albedo values for AMF calculations
-    albwv = np.array(info["albwv"])
-    nalbwv = albwv.size
+    albwvs = np.array(info["albwvs"])
+    nalbwv = albwvs.size
     # variable name copy from info
     alb_file = info["alb_file"][0]
     alb_name = info["alb_name"][0]
@@ -48,7 +48,7 @@ def read_alblut1(info):
     alb_lon_name = info["alb_lon_name"]
 
     # read albedo file
-    with nc.Dataset(alb_file, "r") as fid:
+    with Dataset(alb_file, "r") as fid:
         # alb dimension should be time x wv x lat x lon
         alb0 = (
             amf_func.masked(fid[alb_name][:]) * alb_factor
@@ -121,13 +121,13 @@ def read_alblut1(info):
             alb1 = np.zeros((nalbwv, dim_alb[0], dim_alb[2], dim_alb[3]))
             # calculate albedo for selected wavelengths
             for i in range(nalbwv):
-                assert (albwv[i] >= wvs[0]) & (albwv[i] <= wvs[-1]), (
+                assert (albwvs[i] >= wvs[0]) & (albwvs[i] <= wvs[-1]), (
                     "albedo wavelength is out of range"
                 )
-                idx = bisect.bisect_right(wvs, albwv[i])
+                idx = bisect.bisect_right(wvs, albwvs[i])
                 if idx == wvs.size:
                     idx = wvs.size - 1
-                dis = (albwv[i] - wvs[idx - 1]) / (wvs[idx] - wvs[idx - 1])
+                dis = (albwvs[i] - wvs[idx - 1]) / (wvs[idx] - wvs[idx - 1])
                 alb1[i, ...] = (
                     alb0[:, idx - 1, ...] * (1 - dis)
                     + alb0[:, idx, ...] * dis
@@ -186,7 +186,7 @@ def read_alblut1(info):
             lon = np.append(lon, lon[1] + 360.0)
 
     alblut = namedtuple("alblut", "alb time wv lat lon")
-    return alblut(alb=[alb], time=time, wv=albwv, lat=lat, lon=lon)
+    return alblut(alb=[alb], time=time, wv=albwvs, lat=lat, lon=lon)
 
 
 def read_alblut2(info):
@@ -197,15 +197,15 @@ def read_alblut2(info):
         alb_name: list with 1/2 element(s)
         alb_time_name: only set when alb_time_mode>=2
         alb_wv_name: optional dimension
-    output: albwv x time x lon x lat
+    output: albwvs x time x lon x lat
         if alb_name is one element
         value = alb(0) + alb(1)*vza + ... alb(nvza-1)*vza**(nvza-1)
         if alb_name is two elements
         value = alb0 + alb1(0) + alb1(1)*vza + ... alb1(nvza-1)*vza**(nvza-1)
     """
     # albedo values for AMF calculations
-    albwv = np.array(info["albwv"])
-    nalbwv = albwv.size
+    albwvs = np.array(info["albwvs"])
+    nalbwv = albwvs.size
     # variable name copy from info
     alb_file = info["alb_file"][0]
     alb_name = info["alb_name"][:]
@@ -223,7 +223,7 @@ def read_alblut2(info):
     assert len(alb_name) in [1, 2]
 
     # read albedo file
-    with nc.Dataset(alb_file, "r") as fid:
+    with Dataset(alb_file, "r") as fid:
         # alb0 has (time),(wv), lat, lon and nvza dimensions
         # len(info['alb_name']) should be 1/2, checked in beprep.check_variable
         if len(alb_name) == 1:
@@ -318,13 +318,13 @@ def read_alblut2(info):
             )
             # calculate albedo for selected wavelengths
             for i in range(nalbwv):
-                assert (albwv[i] >= wvs[0]) & (albwv[i] <= wvs[-1]), (
+                assert (albwvs[i] >= wvs[0]) & (albwvs[i] <= wvs[-1]), (
                     "albedo wavelength is out of range"
                 )
-                idx = bisect.bisect_right(wvs, albwv[i])
+                idx = bisect.bisect_right(wvs, albwvs[i])
                 if idx == wvs.size:
                     idx = wvs.size - 1
-                dis = (albwv[i] - wvs[idx - 1]) / (wvs[idx] - wvs[idx - 1])
+                dis = (albwvs[i] - wvs[idx - 1]) / (wvs[idx] - wvs[idx - 1])
                 alb1[i, ...] = (
                     alb0[:, idx - 1, ...] * (1 - dis)
                     + alb0[:, idx, ...] * dis
@@ -391,17 +391,17 @@ def read_alblut2(info):
             lon = np.append(lon, lon[1] + 360.0)
 
     alblut = namedtuple("alblut", "alb time wv lat lon nvza")
-    return alblut(alb=[alb], time=time, wv=albwv, lat=lat, lon=lon, nvza=nvza)
+    return alblut(alb=[alb], time=time, wv=albwvs, lat=lat, lon=lon, nvza=nvza)
 
 
 def read_alblut3(info):
     """
     read BRDF surface albedo climatology when alb_mode=3
     list of alb_name: (time) x lon x lat
-    calculation only for single wavelength (len(albwv) = 1)
+    calculation only for single wavelength (len(albwvs) = 1)
     """
     # only for single wavelength calculation when alb_mode=3
-    assert len(info["albwv"]) == 1
+    assert len(info["albwvs"]) == 1
     # variable name copy from info (no alb_wv_name for this case)
     alb_file = info["alb_file"][0]
     alb_name = info["alb_name"][:]
@@ -416,7 +416,7 @@ def read_alblut3(info):
     alb = []
 
     # read albedo file
-    with nc.Dataset(alb_file[0], "r") as fid:
+    with Dataset(alb_file[0], "r") as fid:
         # alb dimension should be time x lat x lon
         for i in range(nalb):
             alb.append(amf_func.masked(fid[alb_name[i]][:]) * alb_factor[i])
@@ -541,12 +541,12 @@ def read_alblut3(info):
 def read_alblut_omi(info):
     """
     read OMI surface albedo climatology when alb_mode=9
-    alb_name: (time) x albwv x lat x lon (yearly or monthly)
+    alb_name: (time) x albwvs x lat x lon (yearly or monthly)
     latitude/longitude need a correction (shift by 0.25 degree)
     """
     # albedo values for AMF calculations
-    albwv = np.array(info["albwv"])
-    nalbwv = albwv.size
+    albwvs = np.array(info["albwvs"])
+    nalbwv = albwvs.size
     # variable name copy from info (alb_time_name is not used)
     alb_file = info["alb_file"][0]
     alb_name = info["alb_name"][0]
@@ -575,7 +575,7 @@ def read_alblut_omi(info):
     if info["alb_region_flag"] & info["verbose"]:
         print("warnning: for OMI LER data, alb_region_flag should be False")
     # read albedo file
-    with nc.Dataset(alb_file, "r") as fid:
+    with Dataset(alb_file, "r") as fid:
         # alb dimension should be (time) x wv x lat x lon
         alb0 = amf_func.masked(fid[alb_name][:]) * alb_factor
         lat = amf_func.masked(fid[alb_lat_name][:])
@@ -596,13 +596,13 @@ def read_alblut_omi(info):
         tempalb = np.zeros((nalbwv, dim_alb[0], dim_alb[2], dim_alb[3]))
         # calculate albedo for selected wavelengths
         for i in range(nalbwv):
-            assert (albwv[i] >= wvs[0]) & (albwv[i] <= wvs[-1]), (
+            assert (albwvs[i] >= wvs[0]) & (albwvs[i] <= wvs[-1]), (
                 "albedo wavelength is out of range"
             )
-            idx = bisect.bisect_right(wvs, albwv[i])
+            idx = bisect.bisect_right(wvs, albwvs[i])
             if idx == wvs.size:
                 idx = wvs.size - 1
-            dis = (albwv[i] - wvs[idx - 1]) / (wvs[idx] - wvs[idx - 1])
+            dis = (albwvs[i] - wvs[idx - 1]) / (wvs[idx] - wvs[idx - 1])
             tempalb[i, ...] = (
                 alb0[:, idx - 1, :, :] * (1 - dis) + alb0[:, idx, :, :] * dis
             )
@@ -637,7 +637,7 @@ def read_alblut_omi(info):
         lon = np.append(lon, lon[1] + 360.0)
 
         alblut = namedtuple("alblut", "alb time wv lat lon")
-        return alblut(alb=[alb], time=time, wv=albwv, lat=lat, lon=lon)
+        return alblut(alb=[alb], time=time, wv=albwvs, lat=lat, lon=lon)
 
 
 def cal_alb(info, inp, alblut):

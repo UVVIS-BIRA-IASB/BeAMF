@@ -1,5 +1,7 @@
 import numpy as np
-import netCDF4 as nc
+from netCDF4 import Dataset
+from scipy.interpolate import interp1d
+import datetime as dt
 from glob import glob
 import os
 import bisect
@@ -34,21 +36,22 @@ class amf:
         self.info = {
             "configuration_file": "",
             "verbose": False,
-            "molecular": "",
+            "molecule": "",
             "wavelength": [],
             "wv_flag": False,
             "amfgeo_flag": False,
             "amftrop_flag": False,
             "bc_flag": False,
+            "sts_flag": False,
             "cf_flag": False,
             "vcd_flag": False,
             "cldcorr_flag": False,
-            "cfcorr_cfthreshold": 0.0,
-            "cfcorr_cfunits": 0,
+            "cldcorr_cfthreshold": 0.0,
+            "cldcorr_cfunits": 0,
             "tcorr_flag": False,
-            "tcorr_mode": 0,
-            "tcorr_coeffs": [],
-            "tcorr_ref": [],
+            "tcorr_mode": [],
+            "tcorr_tcoeffs": [],
+            "tcorr_tref": [],
             "spcorr_flag": False,
             "geo_units": 0,
             "sza_min": 0.0,
@@ -94,12 +97,12 @@ class amf:
             "alb_file": [],
             "alb_name": [],
             "alb_factor": [],
-            "alb_lat_name": "",
-            "alb_lon_name": "",
             "alb_time_mode": 0,
             "alb_time_name": "",
+            "alb_lat_name": "",
+            "alb_lon_name": "",
             "alb_wv_name": "",
-            "albwv": [],
+            "albwvs": [],
             "alb_region_flag": False,
             "alb_vza_sign": False,
             "cld_mode": 0,
@@ -114,16 +117,16 @@ class amf:
             "pro_units": 0,
             "tpro_name": "",
             "tpro_units": 0,
-            "tropopause_mode": 0,
             "tropopause_name": "",
+            "tropopause_mode": 0,
             "pro_th_name": "",
             "pro_th_units": 0,
             "pro_sp_name": "",
             "pro_sp_units": 0,
             "pro_lat_name": "",
             "pro_lon_name": "",
-            "pro_time_name": "",
             "pro_time_mode": 0,
+            "pro_time_name": "",
             "pro_time_reference": [],
             "pro_grid_mode": 0,
             "pro_grid_name": [],
@@ -142,7 +145,7 @@ class amf:
             "out_file_mode": 0,
             "out_file": [],
         }
-
+        # output variables
         self.out = {
             "latitude": np.array([]),
             "longitude": np.array([]),
@@ -175,12 +178,12 @@ class amf:
             "vcd": np.array([]),
             "vcdtrop": np.array([]),
             "wvidx": np.array([]),
-            "nwv": 0,
-            "nalb": 0,
-            "nlayer": 0,
-            "size": 0,
+            "nwv": 0,  # number of wavelengths for AMF calculation
+            "nalb": 0,  # number of parameters to treat surface albedo
+            "nlayer": 0,  # number of layer for trace gas profile
+            "size": 0,  # size of input data
         }
-
+        # output variable names in output file
         self.out_name = {
             "latitude": "",
             "longitude": "",
@@ -213,7 +216,7 @@ class amf:
             "vcd": "",
             "vcdtrop": "",
         }
-
+        # output variable flags
         self.out_flag = {
             "latitude": False,
             "longitude": False,
@@ -236,7 +239,7 @@ class amf:
             "tropopause": False,
             "other_variable": False,
             "amf_geo": False,
-            "amf": True,
+            "amf": False,
             "amf_clr": False,
             "amf_cld": False,
             "cloud_radiance_fraction": False,
@@ -262,8 +265,7 @@ class amf:
         None.
         """
 
-        # var0 --> info
-        # all variables
+        # ---------var0 --> info---------
         # 1. settings
         for key in var0["settings"].keys():
             self.info[key] = var0["settings"][key]
@@ -292,242 +294,24 @@ class amf:
         # 2.7 background correction settings
         for key in var0["bc"].keys():
             self.info[key] = var0["bc"][key]
-        # 2.5 output
+        # 3. output
         for key in var0["output"].keys():
             self.info[key] = var0["output"][key]
-        # var1 --> info
-        # only when var1 is not default value
-        # 1. settings
-        if var1.verbose:
-            self.info["verbose"] = var1.verbose
-        if var1.molecular:
-            self.info["molecular"] = var1.molecular
-        if var1.wavelength:
-            self.info["wavelength"] = var1.wavelength
-        if var1.wv_flag:
-            self.info["wv_flag"] = var1.wv_flag
-        if var1.amfgeo_flag:
-            self.info["amfgeo_flag"] = var1.amfgeo_flag
-        if var1.amftrop_flag:
-            self.info["amftrop_flag"] = var1.amftrop_flag
-        if var1.bc_flag:
-            self.info["bc_flag"] = var1.bc_flag
-        if var1.cf_flag:
-            self.info["cf_flag"] = var1.cf_flag
-        if var1.vcd_flag:
-            self.info["vcd_flag"] = var1.vcd_flag
-        if var1.cldcorr_flag:
-            self.info["cldcorr_flag"] = var1.cldcorr_flag
-            if var1.cldcorr_cfthreshold:
-                self.info["cldcorr_cfthreshold"] = var1.cldcorr_cfthreshold
-            if var1.cldcorr_cfunits:
-                self.info["cldcorr_cfunits"] = var1.cldcorr_cfunits
-        if var1.tcorr_flag:
-            self.info["tcorr_flag"] = var1.tcorr_flag
-            if var1.tcorr_mode:
-                self.info["tcorr_mode"] = var1.tcorr_mode
-            if var1.tcorr_coeffs:
-                self.info["tcorr_coeffs"] = var1.tcorr_coeffs
-            if var1.tcorr_ref:
-                self.info["tcorr_ref"] = var1.tcorr_ref
-        if var1.spcorr_flag:
-            self.info["spcorr_flag"] = var1.spcorr_flag
-        if var1.geo_units:
-            self.info["geo_units"] = var1.geo_units
-        # 1.1 criteria for AMF calculation
-        if var1.sza_min:
-            self.info["sza_min"] = var1.sza_min
-        if var1.sza_max:
-            self.info["sza_max"] = var1.sza_max
-        if var1.vza_min:
-            self.info["vza_min"] = var1.vza_min
-        if var1.vza_max:
-            self.info["vza_max"] = var1.vza_max
-        if var1.lat_min:
-            self.info["lat_min"] = var1.lat_min
-        if var1.lat_max:
-            self.info["lat_max"] = var1.lat_max
-        if var1.lon_min:
-            self.info["lon_min"] = var1.lon_min
-        if var1.lon_max:
-            self.info["lon_max"] = var1.lon_max
-        # 2. input
-        # 2.0 box-AMF LUT data
-        if var1.lut_file:
-            self.info["lut_file"] = var1.lut_file
-        if var1.lut_rad_name:
-            self.info["lut_rad_name"] = var1.lut_rad_name
-        if var1.lut_amf_name:
-            self.info["lut_amf_name"] = var1.lut_amf_name
-        if var1.lut_var_name:
-            self.info["lut_var_name"] = var1.lut_var_name
-        if var1.lut_alb_name:
-            self.info["lut_alb_name"] = var1.lut_alb_name
-        if var1.lut_other_name:
-            self.info["lut_other_name"] = var1.lut_other_name
-        # 2.1 general input information
-        if var1.inp_file:
-            self.info["inp_file"] = var1.inp_file
-        if var1.file_type:
-            self.info["file_type"] = var1.file_type
-        if var1.wvidx_name:
-            self.info["wvidx_name"] = var1.wvidx_name
-        if var1.scd_name:
-            self.info["scd_name"] = var1.scd_name
-        if var1.intens_name:
-            self.info["intens_name"] = var1.intens_name
-        if var1.lat_name:
-            self.info["lat_name"] = var1.lat_name
-        if var1.lon_name:
-            self.info["lon_name"] = var1.lon_name
-        if var1.latcor_name:
-            self.info["latcor_name"] = var1.latcor_name
-        if var1.loncor_name:
-            self.info["loncor_name"] = var1.loncor_name
-        if var1.sza_name:
-            self.info["sza_name"] = var1.sza_name
-        if var1.vza_name:
-            self.info["vza_name"] = var1.vza_name
-        if var1.raa_name:
-            self.info["raa_name"] = var1.raa_name
-        if var1.raa_mode:
-            self.info["raa_mode"] = var1.raa_mode
-        if var1.time_mode:
-            self.info["time_mode"] = var1.time_mode
-        if var1.time_name:
-            self.info["time_name"] = var1.time_name
-        if var1.time_units:
-            self.info["time_units"] = var1.time_units
-        if var1.timedelta_name:
-            self.info["timedelta_name"] = var1.timedelta_name
-        if var1.timedelta_units:
-            self.info["timedelta_units"] = var1.timedelta_units
-        if var1.time_reference:
-            self.info["time_reference"] = var1.time_reference
-        # 2.2 terrain height data
-        if var1.th_mode:
-            self.info["th_mode"] = var1.th_mode
-        if var1.th_file:
-            self.info["th_file"] = var1.th_file
-        if var1.th_name:
-            self.info["th_name"] = var1.th_name
-        if var1.th_units:
-            self.info["th_units"] = var1.th_units
-        if var1.th_lat_name:
-            self.info["th_lat_name"] = var1.th_lat_name
-        if var1.th_lon_name:
-            self.info["th_lon_name"] = var1.th_lon_name
-        # 2.3 surface albedo data
-        if var1.alb_mode:
-            self.info["alb_mode"] = var1.alb_mode
-        if var1.alb_file:
-            self.info["alb_file"] = var1.alb_file
-        if var1.alb_name:
-            self.info["alb_name"] = var1.alb_name
-        if var1.alb_factor:
-            self.info["alb_factor"] = var1.alb_factor
-        if var1.alb_time_mode:
-            self.info["alb_time_mode"] = var1.alb_time_mode
-        if var1.alb_time_name:
-            self.info["alb_time_name"] = var1.alb_time_name
-        if var1.alb_lat_name:
-            self.info["alb_lat_name"] = var1.alb_lat_name
-        if var1.alb_lon_name:
-            self.info["alb_lon_name"] = var1.alb_lon_name
-        if var1.alb_wv_name:
-            self.info["alb_wv_name"] = var1.alb_wv_name
-        if var1.albwv:
-            self.info["albwv"] = var1.albwv
-        if var1.alb_region_flag:
-            self.info["alb_region_flag"] = var1.alb_region_flag
-        if var1.alb_vza_sign:
-            self.info["alb_vza_sign"] = var1.alb_vza_sign
-        # 2.4 cloud properties
-        if var1.cld_mode:
-            self.info["cld_mode"] = var1.cld_mode
-        if var1.cld_file:
-            self.info["cld_file"] = var1.cld_file
-        if var1.cf_name:
-            self.info["cf_name"] = var1.cf_name
-        if var1.cp_name:
-            self.info["cp_name"] = var1.cp_name
-        if var1.cp_units:
-            self.info["cp_units"] = var1.cp_units
-        if var1.ca_name:
-            self.info["ca_name"] = var1.ca_name
-        # 2.5 profile information
-        if var1.pro_mode:
-            self.info["pro_mode"] = var1.pro_mode
-        if var1.pro_file:
-            self.info["pro_file"] = var1.pro_file
-        if var1.pro_name:
-            self.info["pro_name"] = var1.pro_name
-        if var1.pro_units:
-            self.info["pro_units"] = var1.pro_units
-        if var1.tpro_name:
-            self.info["tpro_name"] = var1.tpro_name
-        if var1.tpro_units:
-            self.info["tpro_units"] = var1.tpro_units
-        if var1.tropopause_name:
-            self.info["tropopause_name"] = var1.tropopause_name
-        if var1.tropopause_mode:
-            self.info["tropopause_mode"] = var1.tropopause_mode
-        if var1.pro_th_name:
-            self.info["pro_th_name"] = var1.pro_th_name
-        if var1.pro_th_units:
-            self.info["pro_th_units"] = var1.pro_th_units
-        if var1.pro_sp_name:
-            self.info["pro_sp_name"] = var1.pro_sp_name
-        if var1.pro_sp_units:
-            self.info["pro_sp_units"] = var1.pro_sp_units
-        if var1.pro_lat_name:
-            self.info["pro_lat_name"] = var1.pro_lat_name
-        if var1.pro_lon_name:
-            self.info["pro_lon_name"] = var1.pro_lon_name
-        if var1.pro_time_name:
-            self.info["pro_time_name"] = var1.pro_time_name
-        if var1.pro_time_mode:
-            self.info["pro_time_mode"] = var1.pro_time_mode
-        if var1.pro_time_reference:
-            self.info["pro_time_reference"] = var1.pro_time_reference
-        if var1.pro_grid_mode:
-            self.info["pro_grid_mode"] = var1.pro_grid_mode
-        if var1.pro_grid_name:
-            self.info["pro_grid_name"] = var1.pro_grid_name
-        if var1.pro_region_flag:
-            self.info["pro_region_flag"] = var1.pro_region_flag
-        # 2.6 other variable information
-        if var1.var_file:
-            self.info["var_file"] = var1.var_file
-        if var1.var_name:
-            self.info["var_name"] = var1.var_name
-        # 3. background correction
-        if var1.bc_lon_lim:
-            self.info["bc_lon_lim"] = var1.bc_lon_lim
-        if var1.bc_lat_lim:
-            self.info["bc_lat_lim"] = var1.bc_lat_lim
-        if var1.bc_vza_lim:
-            self.info["bc_vza_lim"] = var1.bc_vza_lim
-        if var1.bc_sza_lim:
-            self.info["bc_sza_lim"] = var1.bc_sza_lim
-        if var1.bc_x_name:
-            self.info["bc_x_name"] = var1.bc_x_name
-        if var1.bc_x_interval:
-            self.info["bc_x_interval"] = var1.bc_x_interval
-        if var1.bc_x_sample_limit:
-            self.info["bc_x_sample_limit"] = var1.bc_x_sample_limit
-        if var1.bc_test_flag:
-            self.info["bc_test_flag"] = var1.bc_test_flag
-        # 4. output
-        if var1.out_file_type:
-            self.info["out_file_type"] = var1.out_file_type
-        if var1.out_file_mode:
-            self.info["out_file_mode"] = var1.out_file_mode
-        if var1.out_file:
-            self.info["out_file"] = var1.out_file
-        # check whether input variable is list or correct datatype
-        # variable is a list of integer/float or an integer/float
-        keys = ["wavelength", "tcorr_ref", "alb_factor", "albwv"]
+
+        # ---------var1 --> info---------
+        # Namespace --> dict
+        var = vars(var1)
+        # copy the data (neither False or None value) to info
+        for key in var.keys():
+            if type(var[key]) == bool:
+                if var[key]:
+                    self.info[key] = var[key]
+            elif var[key] is not None:
+                self.info[key] = var[key]
+
+        # ---------checking data type of input variables---------
+        # check whether input variable is (list of) int/float
+        keys = ["wavelength", "tcorr_tref", "alb_factor", "albwvs"]
         for key in keys:
             if type(self.info[key]) == list:
                 for var in self.info[key]:
@@ -544,10 +328,8 @@ class amf:
                 )
                 # convert int/float into a list
                 self.info[key] = [self.info[key]]
-        # varible is a list of integer/float
+        # check if varible is a list of integer/float
         keys = [
-            "time_reference",
-            "pro_time_reference",
             "bc_lon_lim",
             "bc_lat_lim",
             "bc_vza_lim",
@@ -562,9 +344,8 @@ class amf:
                 assert type(var) in [int, float], (
                     "datatype of " + key + " is not list of integer/float."
                 )
-        # tcorr_mode
-        # variable is a list of integer or an integer
-        keys = ["tcorr_mode"]
+        # check if variable is a (list of) integer
+        keys = ["time_reference", "pro_time_reference", "tcorr_mode"]
         for key in keys:
             if type(self.info[key]) == list:
                 for var in self.info[key]:
@@ -577,7 +358,7 @@ class amf:
                 )
                 # convert integer into a list
                 self.info[key] = [self.info[key]]
-        # variable is a list of string
+        # check if variable is a list of string
         keys = ["lut_var_name"]
         for key in keys:
             assert type(self.info[key]) == list, "lut_var_name is not list"
@@ -585,7 +366,7 @@ class amf:
                 assert type(var) == str, (
                     "datatype of " + key + " is not list of string."
                 )
-        # variable is a list of string or a string
+        # check if variable is a (list of) string
         keys = [
             "lut_alb_name",
             "lut_other_name",
@@ -616,30 +397,30 @@ class amf:
                     self.info[key] = [self.info[key]]
                 else:
                     self.info[key] = []
-        # tcorr_coeffs is a list of list of int/float
+        # check if tcorr_tcoeffs is a (list of) list of int/float
         assert (
-            type(self.info["tcorr_coeffs"]) == list
-        ), "tcorr_coeffs is not list"
-        if len(self.info["tcorr_coeffs"]) > 0:
-            if type(self.info["tcorr_coeffs"][0]) == list:
-                for tcorr_coeffs in self.info["tcorr_coeffs"]:
-                    assert type(tcorr_coeffs) == list, (
-                        "datatype of tcorr_coeffs is not consistent "
+            type(self.info["tcorr_tcoeffs"]) == list
+        ), "tcorr_tcoeffs is not list"
+        if len(self.info["tcorr_tcoeffs"]) > 0:
+            if type(self.info["tcorr_tcoeffs"][0]) == list:
+                for tcorr_tcoeffs in self.info["tcorr_tcoeffs"]:
+                    assert type(tcorr_tcoeffs) == list, (
+                        "datatype of tcorr_tcoeffs is not consistent "
                         "between the elements in the list"
                     )
-                    for tcorr_coeff in tcorr_coeffs:
-                        assert type(tcorr_coeff) in [int, float], (
-                            "datatype of tcorr_coeffs is not (list of) "
+                    for tcorr_tcoeff in tcorr_tcoeffs:
+                        assert type(tcorr_tcoeff) in [int, float], (
+                            "datatype of tcorr_tcoeffs is not (list of) "
                             "integer or float"
                         )
-            elif type(self.info["tcorr_coeffs"][0]) in [int, float]:
-                for tcorr_coeffs in self.info["tcorr_coeffs"]:
-                    assert type(tcorr_coeffs) in [int, float], (
-                        "datatype of tcorr_coeffs is not (list of) "
+            elif type(self.info["tcorr_tcoeffs"][0]) in [int, float]:
+                for tcorr_tcoeffs in self.info["tcorr_tcoeffs"]:
+                    assert type(tcorr_tcoeffs) in [int, float], (
+                        "datatype of tcorr_tcoeffs is not (list of) "
                         "integer or float"
                     )
-                self.info["tcorr_coeffs"] = [self.info["tcorr_coeffs"]]
-        # variable is a float/integer
+                self.info["tcorr_tcoeffs"] = [self.info["tcorr_tcoeffs"]]
+        # check if variable is a float/integer
         keys = [
             "cldcorr_cfthreshold",
             "sza_min",
@@ -655,7 +436,7 @@ class amf:
             assert type(self.info[key]) in [int, float], (
                 "datatype of " + key + " is not integer/float."
             )
-        # variable is an integer
+        # check if variable is an integer
         keys = [
             "cldcorr_cfunits",
             "geo_units",
@@ -678,25 +459,25 @@ class amf:
             "pro_sp_units",
             "pro_time_mode",
             "pro_grid_mode",
+            "bc_x_sample_limit",
             "out_file_type",
             "out_file_mode",
-            "bc_x_sample_limit",
         ]
         for key in keys:
             assert type(self.info[key]) == int, (
                 "datatype of " + key + " is not integer."
             )
-        # variable is a string
+        # check if variable is a string
         keys = [
-            "molecular",
+            "molecule",
             "lut_file",
             "lut_rad_name",
             "lut_amf_name",
             "wvidx_name",
             "scd_name",
             "intens_name",
-            "lon_name",
             "lat_name",
+            "lon_name",
             "latcor_name",
             "loncor_name",
             "sza_name",
@@ -704,11 +485,11 @@ class amf:
             "time_name",
             "timedelta_name",
             "th_name",
-            "th_lon_name",
             "th_lat_name",
-            "alb_lon_name",
-            "alb_lat_name",
+            "th_lon_name",
             "alb_time_name",
+            "alb_lat_name",
+            "alb_lon_name",
             "alb_wv_name",
             "cf_name",
             "cp_name",
@@ -718,8 +499,8 @@ class amf:
             "tropopause_name",
             "pro_th_name",
             "pro_sp_name",
-            "pro_lon_name",
             "pro_lat_name",
+            "pro_lon_name",
             "pro_time_name",
             "bc_x_name",
         ]
@@ -727,13 +508,14 @@ class amf:
             assert type(self.info[key]) == str, (
                 "datatype of " + key + " is not string."
             )
-        # variable is a boolean
+        # check if variable is a boolean
         keys = [
             "verbose",
             "wv_flag",
             "amfgeo_flag",
             "amftrop_flag",
             "bc_flag",
+            "sts_flag",
             "cf_flag",
             "vcd_flag",
             "cldcorr_flag",
@@ -748,14 +530,16 @@ class amf:
             assert type(self.info[key]) == bool, (
                 "datatype of " + key + " is not boolean."
             )
-        # check variables from [output][out_var_flag/out_var_name]
+        # check datatype of variable from [output][out_var_flag/out_var_name]
         out_var_flag = self.info["out_var_flag"]
         out_var_name = self.info["out_var_name"]
         for key in out_var_flag:
+            # out_var_flag is a boolean variable
             assert type(out_var_flag[key]) == bool, (
                 "datatype of out_var_flag[" + key + "] is not boolean."
             )
             if out_var_flag[key]:
+                # these variables are saved as a list of array (string name).
                 if key in [
                     "amf",
                     "amf_clr",
@@ -781,7 +565,7 @@ class amf:
                             ]
                         else:
                             self.info["out_var_name"][key] = []
-                else:
+                else:  # otherwise, as an array (a string name)
                     assert type(out_var_name[key]) == str, (
                         "datatype of out_var_name[" + key + "] is not string."
                     )
@@ -791,61 +575,102 @@ class amf:
         check the input information settings for the AMF calculation.
         Parameters
         """
+
+        verbose = self.info["verbose"]
+
         # 1. settings
-        self.verbose = self.info["verbose"]
-        # check molecular is in the list
-        # ["NO2", "HCHO", "SO2", "O3", "C2H2O2", "O4"]
-        assert self.info["molecular"].upper() in [
+        # check molecule is in the list
+        # ["NO2", "HCHO", "SO2", "O3", "CHOCHO", "O4"]
+        assert self.info["molecule"].upper() in [
             "NO2",
             "HCHO",
             "SO2",
             "O3",
-            "C2H2O2",
+            "CHOCHO",
             "O4",
-        ], "molecular is not NO2, HCHO, SO2, O3, C2H2O2, O4"
+        ], "molecule is not NO2, HCHO, SO2, O3, glyoxal, O4"
+
         # check wavelength range between 300 and 800nm
         self.wavelength = self.info["wavelength"]
-        # if wavelength is not set,
-        # then use the default value based on molecular.
+
+        # if wavelength is not set, then use the default value
+        # based on molecule.
         if len(self.wavelength) == 0:
-            if self.info["molecular"].upper() == "NO2":
+            if self.info["molecule"].upper() == "NO2":
                 self.wavelength = [440.0]
-            elif self.info["molecular"].upper() == "HCHO":
+            elif self.info["molecule"].upper() == "HCHO":
                 self.wavelength = [340.0]
-            elif self.info["molecular"].upper() == "SO2":
+            elif self.info["molecule"].upper() == "SO2":
                 self.wavelength = [313.0]
-            elif self.info["molecular"].upper() == "O3":
+            elif self.info["molecule"].upper() == "O3":
                 self.wavelength = [334.0]  # OMI DOAS total ozone retrieval
-            elif self.info["molecular"].upper() == "C2H2O2":
+            elif self.info["molecule"].upper() == "CHOCHO":
                 self.wavelength = [450.0]
-            elif self.info["molecular"].upper() == "O4":
-                self.wavelength = [477.0]
+            elif self.info["molecule"].upper() == "O4":
+                self.wavelength = [475.0]
         self.wavelength = np.array(self.wavelength)
+
+        # number of wavelength(s) for AMF calculation
         self.nwv = self.wavelength.size
         assert all(
             (self.wavelength >= 300.0) & (self.wavelength <= 800.0)
         ), "wavelength is out of range -- between [300,800]nm"
+        assert self.nwv >= 1, "len(wavelength)>=1"
 
         # if wv_flag is True, then nwv should be larger than 1
+        # otherwise, switch off wv_flag
         if self.info["wv_flag"]:
-            assert self.nwv > 1, "if wv_flag is True, len(wavelength)>1"
-        # if bc_flag is True, then nwv should be 1
-        if self.info["bc_flag"]:
-            assert self.nwv == 1, "if bc_flag is True, len(wavelength)=1"
-        # if cf_flag is True, then nwv should be 1, and not cloud correction
-        if self.info["cf_flag"]:
-            assert self.nwv == 1, "if cf_flag is True, len(wavelength)=1"
-            assert (
-                not self.cldcorr_flag
-            ), "if cf_flag is True, no cloud correction is applied."
+            if self.nwv == 1:
+                print("Warning: For 1 wavelength, switch off wv_flag")
+                self.info["wv_flag"] = False
+
         # if vcd_flag is True, then nwv should be 1
-        # amftrop_flag=False or amftrop_flag/bc_flag=True
+        # otherwise, switch off vcd_flag
         if self.info["vcd_flag"]:
-            assert self.nwv == 1, "if vcd_flag is True, len(wavelength)=1"
-            if self.info["amftrop_flag"]:
-                assert self.info[
-                    "bc_flag"
-                ], "if vcd_flag/amftrop_flag=True, then bc_flag=True."
+            if self.nwv > 1:
+                print(
+                    "Warning: For More than 1 wavelength AMF calculation, "
+                    "switch off vcd_flag"
+                    )
+                self.info["vcd_flag"] = False
+
+        # if bc_flag/sts_flag is True, then nwv should be 1
+        # otherwise, switch off bc_flag/sts_flag
+        if self.info["bc_flag"] | self.info["sts_flag"]:
+            if self.nwv > 1:
+                print(
+                    "Warning: For More than 1 wavelength AMF calculation, "
+                    "switch off bc_flag/sts_flag"
+                    )
+                self.info["bc_flag"] = False
+                self.info["sts_flag"] = False
+
+        # if amftrop_flag is True, then bc_flag/sts_flag=True
+        # otherwise, switch off amftrop_flag
+        #if self.info["amftrop_flag"] & self.info["vcd_flag"]:
+            #if not (self.info["sts_flag"] | self.info["bc_flag"]):
+                #print(
+                    #"Warning: No background (bc_flag) or STS(sts_flag)"
+                    #" correction (amftrop_flag=True), switch off vcd_flag"
+                    #)
+            #self.info["amftrop_flag"] = False
+
+        # if cf_flag is True:
+        #   then nwv should be 1, otherwise, switch off cf_flag
+        #   no cloud correction
+        if self.info["cf_flag"]:
+            if self.nwv > 1:
+                print(
+                    "Warning: For More than 1 wavelength AMF calculation, "
+                    "switch off cf_flag"
+                    )
+                self.info["cf_flag"] = False
+            elif self.info["cldcorr_flag"]:
+                print(
+                    "Warning: Can not both cf_flag and cldcorr_flag are "
+                    "truth, switch off cldcorr_flag")
+                self.info["cldcorr_flag"] = False
+
         # check cldcorr mode setting:
         if self.info["cldcorr_flag"]:
             # check cfthreshold should between [0, 1)
@@ -864,19 +689,20 @@ class amf:
             assert all(
                 (tcorr_mode >= 0) & (tcorr_mode <= 3)
             ), "tcorr_mode is out of range -- (0/1/2/3)"
-            # check len(tcorr_mode) = len(tcorr_coeffs) = len(tcorr_ref)
+            # check len(tcorr_mode) = len(tcorr_tcoeffs) = len(tcorr_tref)
             assert (
                 len(self.info["tcorr_mode"])
-                == len(self.info["tcorr_coeffs"])
-                == len(self.info["tcorr_ref"])
-            ), "size of tcorr_mode/tcorr_coeffs/tcorr_ref is not the same"
+                == len(self.info["tcorr_tcoeffs"])
+                == len(self.info["tcorr_tref"])
+            ), "size of tcorr_mode/tcorr_tcoeffs/tcorr_tref is not the same"
+            # if size=1 but nwv>1, then all tcorr data are the same for all wv
             n = len(self.info["tcorr_mode"])
             if n == 1:
                 self.info["tcorr_mode"] = self.info["tcorr_mode"] * self.nwv
-                self.info["tcorr_coeffs"] = (
-                    self.info["tcorr_coeffs"] * self.nwv
+                self.info["tcorr_tcoeffs"] = (
+                    self.info["tcorr_tcoeffs"] * self.nwv
                 )
-                self.info["tcorr_ref"] = self.info["tcorr_ref"] * self.nwv
+                self.info["tcorr_tref"] = self.info["tcorr_tref"] * self.nwv
             else:
                 assert n == self.nwv, (
                     "size of tcorr variables and wavelenth is not the same"
@@ -902,43 +728,43 @@ class amf:
         ), "lon_min should be smaller than lon_max"
         if self.info["sza_min"] < 0:
             self.info["sza_min"] = 0.0
-            if self.verbose:
+            if verbose:
                 print("Warning: sza_min is set to 0 internally.")
         if self.info["sza_max"] > 90:
             self.info["sza_max"] = 90.0
-            if self.verbose:
+            if verbose:
                 print("Warning: sza_max is set to 90 internally.")
         if self.info["vza_min"] < 0:
             self.info["vza_min"] = 0.0
-            if self.verbose:
+            if verbose:
                 print("Warning: vza_min is set to 0 internally.")
         if self.info["vza_max"] > 90:
             self.info["vza_max"] = 90.0
-            if self.verbose:
+            if verbose:
                 print("Warning: vza_max is set to 90 internally.")
         if self.info["lat_min"] < -90:
             self.info["lat_min"] = -90.0
-            if self.verbose:
+            if verbose:
                 print("Warning: lat_min is set to -90 internally.")
         if self.info["lat_max"] > 90:
             self.info["lat_max"] = 90.0
-            if self.verbose:
+            if verbose:
                 print("Warning: lat_max is set to 90 internally.")
         if self.info["lon_min"] < -360:
             self.info["lon_min"] = -360.0
-            if self.verbose:
+            if verbose:
                 print("Warning: lon_min is set to -360 internally.")
         if self.info["lon_min"] > 360:
             self.info["lon_min"] = 360.0
-            if self.verbose:
+            if verbose:
                 print("Warning: lon_min is set to 360 internally.")
         if self.info["lon_max"] < -360:
             self.info["lon_max"] = -360.0
-            if self.verbose:
+            if verbose:
                 print("Warning: lon_max is set to -360 internally.")
         if self.info["lon_max"] > 360:
             self.info["lon_max"] = 360.0
-            if self.verbose:
+            if verbose:
                 print("Warning: lon_max is set to 360 internally.")
         # set lon_min/lon_max within range of [-180, 180]
         if self.info["lon_min"] < -180:
@@ -954,9 +780,9 @@ class amf:
         # 2.0 LUT file
         # check lut_file is NetCDF (including HDF5) file
         try:
-            fid = nc.Dataset(self.info["lut_file"], "r")
+            fid = Dataset(self.info["lut_file"], "r")
             fid.close()
-        except IndexError:
+        except:
             print("lut_file is not netCDF/HDF file")
             raise
         self.lut_file = self.info["lut_file"]
@@ -990,23 +816,23 @@ class amf:
             4,
             9,
         ], "file_type is out of range -- (0/1/2/3/4/9)"
-        # check molecular for different file_type
-        # if file_type=0/9, for all moleculars
+        # check molecule for different file_type
+        # if file_type=0/9, for all molecules
         if self.info["file_type"] == 1:  # TROPOMI
-            assert self.info["molecular"].upper() in ["NO2", "HCHO", "SO2"], (
-                self.info["molecular"] + "is not in TROPOMI L2 file"
+            assert self.info["molecule"].upper() in ["NO2", "HCHO", "SO2"], (
+                self.info["molecule"] + "is not in TROPOMI L2 file"
             )
         elif self.info["file_type"] == 2:  # QA4ECV
-            assert self.info["molecular"].upper() in ["NO2", "HCHO"], (
-                self.info["molecular"] + "is not in QA4ECV L2 file"
+            assert self.info["molecule"].upper() in ["NO2", "HCHO"], (
+                self.info["molecule"] + "is not in QA4ECV L2 file"
             )
         elif self.info["file_type"] == 3:  # OMI
-            assert self.info["molecular"].upper() in ["NO2"], (
-                self.info["molecular"] + "is not in OMI L2 file"
+            assert self.info["molecule"].upper() in ["NO2"], (
+                self.info["molecule"] + "is not in OMI L2 file"
             )
         elif self.info["file_type"] == 4:  # operational GOME-2
-            assert self.info["molecular"].upper() in ["NO2", "HCHO", "SO2"], (
-                self.info["molecular"] + "is not in GOME-2 operational L2 file"
+            assert self.info["molecule"].upper() in ["NO2", "HCHO", "SO2"], (
+                self.info["molecule"] + "is not in GOME-2 operational L2 file"
             )
         # get all inp_file
         if self.info["inp_file"] == 0:
@@ -1017,9 +843,10 @@ class amf:
         else:
             self.inp_file = self.info["inp_file"]
         # for background correction, more than 10 files are needed.
-        if self.info["bc_flag"]:
+        if self.info["bc_flag"] | self.info["sts_flag"]:
             assert len(self.inp_file) >= 10, (
-                "number of inp_file should be larger than 10 when bc_flag=True"
+                "number of inp_file should be larger than 10 when "
+                "bc_flag/sts_flag=True"
             )
 
         # 2.2 terrain height (only needed when spcorr_flag is set)
@@ -1132,8 +959,8 @@ class amf:
                 self.inp_file
             ), "len(var_file) is not len(inp_file)"
 
-        # 3. background correction
-        if self.info["bc_flag"]:
+        # 3. background/stratospheric correction
+        if self.info["bc_flag"] | self.info["sts_flag"]:
             # if bc_lon_lim is not set, then set it as [-180, 180]
             # bc_lon_lim should be within [-360, 360]
             if len(self.info["bc_lon_lim"]) == 0:
@@ -1199,9 +1026,9 @@ class amf:
                     "bc_x_interval[0] and [1] is incorrect ([0] < [1])"
                 )
                 if (data0[0] < xlimit[0]) | (data0[1] > xlimit[1]):
-                    if self.verbose:
+                    if verbose:
                         print(
-                            "warning: bc_x_interval is out of range (" +
+                            "Warning: bc_x_interval is out of range (" +
                             ",".join(str(d) for d in xlimit) +
                             ")"
                         )
@@ -1216,9 +1043,9 @@ class amf:
                     "bc_x_interval[2] is incorrect (>=5)"
                 )
                 if (data0[0] < xlimit[0]) | (data0[1] > xlimit[1]):
-                    if self.verbose:
+                    if verbose:
                         print(
-                            "warning: bc_x_interval is out of range (" +
+                            "Warning: bc_x_interval is out of range (" +
                             ",".join(str(d) for d in xlimit) +
                             ")"
                         )
@@ -1228,9 +1055,9 @@ class amf:
                 assert amf_func.monotonic(data0) == 2, (
                     "bc_x_interval is not monotonicity increasing")
                 if (data0[0] < xlimit[0]) | (data0[-1] > xlimit[1]):
-                    if self.verbose:
+                    if verbose:
                         print(
-                            "warning: bc_x_interval is out of range (" +
+                            "Warning: bc_x_interval is out of range (" +
                             ",".join(str(d) for d in xlimit) +
                             ")"
                         )
@@ -1243,8 +1070,8 @@ class amf:
                 "bc_x_sample_limit is incorrect (>=10)"
             )
             if self.info["bc_x_sample_limit"] < 50:
-                if self.verbose:
-                    print("warning: bc_x_sample_limit is less than 50.")
+                if verbose:
+                    print("Warning: bc_x_sample_limit is less than 50.")
 
         # 4. output
         # check out_file_type range
@@ -1257,20 +1084,20 @@ class amf:
             9,
         ], "out_file_type is out of range -- (0/1/2/3/4/9)"
         if self.info["out_file_type"] == 1:  # TROPOMI operational product
-            assert self.info["molecular"].upper() in ["NO2", "HCHO", "SO2"], (
-                self.info["molecular"] + "is not in TROPOMI L2 file"
+            assert self.info["molecule"].upper() in ["NO2", "HCHO", "SO2"], (
+                self.info["molecule"] + "is not in TROPOMI L2 file"
             )
         elif self.info["out_file_type"] == 2:  # QA4ECV
-            assert self.info["molecular"].upper() in ["NO2", "HCHO"], (
-                self.info["molecular"] + "is not in QA4ECV L2 file"
+            assert self.info["molecule"].upper() in ["NO2", "HCHO"], (
+                self.info["molecule"] + "is not in QA4ECV L2 file"
             )
         elif self.info["out_file_type"] == 3:  # OMI
-            assert self.info["molecular"].upper() in ["NO2"], (
-                self.info["molecular"] + "is not in OMI DOMINO L2 file"
+            assert self.info["molecule"].upper() in ["NO2"], (
+                self.info["molecule"] + "is not in OMI DOMINO L2 file"
             )
         elif self.info["out_file_type"] == 4:  # operational GOME-2
-            assert self.info["molecular"].upper() in ["NO2", "HCHO", "SO2"], (
-                self.info["molecular"] + "is not in GOME-2 operational L2 file"
+            assert self.info["molecule"].upper() in ["NO2", "HCHO", "SO2"], (
+                self.info["molecule"] + "is not in GOME-2 operational L2 file"
             )
         # check out_file_mode range
         assert self.info["out_file_mode"] in [
@@ -1317,14 +1144,14 @@ class amf:
             # TROPOMI/OMI/GOME-2/etc: only save first wavelength result
             if (self.nwv > 1) & (not self.info["wv_flag"]):
                 if self.info["out_file_type"] == 0:
-                    if self.verbose:
+                    if verbose:
                         print(
                             "For out_file_type=0 and multi wavelength AMF "
                             "calculation, out_file_mode is set at 1."
                         )
                     self.info["out_file_mode"] = 1
                 if self.info["out_file_type"] in [1, 2, 3, 4]:
-                    if self.verbose:
+                    if verbose:
                         print(
                             "Warning: For out_file_type="
                             + str(self.info["out_file_type"])
@@ -1362,7 +1189,7 @@ class amf:
 
     def set_input_variable_name(self):
         """
-        setting all default "variable name" based on file_type and molecular
+        setting all default "variable name" based on file_type and molecule
         from the input information
         including:
             wvidx_name / scd_name / intens_name / lat_name / lon_name /
@@ -1375,7 +1202,7 @@ class amf:
         if self.info["file_type"] == 0:  # HARP format
             self.wvidx_name = ""
             self.scd_name = (
-                self.info["molecular"] + "_slant_column_number_density"
+                self.info["molecule"] + "_slant_column_number_density"
             )
             self.intens_name = ""
             self.lat_name = "latitude"
@@ -1386,12 +1213,24 @@ class amf:
             self.vza_name = "sensor_zenith_angle"
             self.raa_name = ["solar_azimuth_angle", "sensor_azimuth_angle"]
             self.raa_mode = 0
-            self.time_mode = 1
-            self.time_name = "datetime"
-            self.time_units = 0  # 0: seconds since the reference time
+            self.time_mode = 1  # only time
+            self.time_name = "datetime_start"
+            self.time_units = 0  # 0: Seconds since the reference time
             self.timedelta_name = ""
             self.timedelta_units = 0
             self.time_reference = [2010, 1, 1]
+            self.pro_name = self.info["molecule"] + "_volume_mixing_ratio_dry_air_apriori"
+            self.pro_units = 0  # Volume mixing ratio
+            self.tpro_name = "temperature"
+            self.tpro_units = 0
+            self.tropopause_name = "tropopause_pressure"
+            self.tropopause_mode = 1  # Tropopause pressure
+            self.pro_sp_name = "surface_pressure"
+            self.pro_sp_units = 0
+            self.pro_grid_name = ["pressure"]
+            self.pro_grid_mode = 1  # Pressure grid at midpoint
+            self.sp_name = "surface_pressure"
+            self.sp_units = 0  # pressure units 
             self.th_name = "surface_altitude"
             self.th_units = 0
             self.alb_name = ["surface_albedo"]
@@ -1400,8 +1239,9 @@ class amf:
             self.cp_name = "cloud_pressure"
             self.cp_units = 0
             self.ca_name = "cloud_albedo"
+            self.var_name = ""
         elif self.info["file_type"] == 1:  # TROPOMI format
-            if self.info["molecular"].upper() == "SO2":
+            if self.info["molecule"].upper() == "SO2":
                 self.wvidx_name = (
                     "/PRODUCT/SUPPORT_DATA/DETAILED_RESULTS/"
                     "selected_fitting_window_flag"
@@ -1444,12 +1284,12 @@ class amf:
             self.time_reference = [2010, 1, 1]
             self.th_name = "/PRODUCT/SUPPORT_DATA/INPUT_DATA/surface_altitude"
             self.th_units = 0
-            if self.info["molecular"].upper() == "NO2":
+            if self.info["molecule"].upper() == "NO2":
                 self.alb_name = [
                     "/PRODUCT/SUPPORT_DATA/INPUT_DATA/"
                     "surface_albedo_nitrogendioxide_window"
                 ]
-            elif self.info["molecular"].upper() == "SO2":
+            elif self.info["molecule"].upper() == "SO2":
                 self.alb_name = [
                     "/PRODUCT/SUPPORT_DATA/INPUT_DATA/surface_albedo_328nm",
                     "/PRODUCT/SUPPORT_DATA/INPUT_DATA/surface_albedo_328nm",
@@ -1460,7 +1300,7 @@ class amf:
                     "/PRODUCT/SUPPORT_DATA/INPUT_DATA/surface_albedo"
                 ]
             self.alb_factor = [1.0]
-            if self.info["molecular"].upper() == "NO2":
+            if self.info["molecule"].upper() == "NO2":
                 self.cf_name = (
                     "/PRODUCT/SUPPORT_DATA/DETAILED_RESULTS/"
                     "cloud_fraction_crb_nitrogendioxide_window"
@@ -1474,7 +1314,7 @@ class amf:
             )
             self.cp_units = 0
             self.ca_name = "/PRODUCT/SUPPORT_DATA/INPUT_DATA/cloud_albedo_crb"
-            if self.info["molecular"].upper() == "SO2":
+            if self.info["molecule"].upper() == "SO2":
                 self.var_name = [
                     "/PRODUCT/SUPPORT_DATA/INPUT_DATA/"
                     "ozone_total_vertical_column"
@@ -1483,11 +1323,11 @@ class amf:
                 self.var_name = ""
         elif self.info["file_type"] == 2:  # QA4ECV product
             self.wvidx_name = ""
-            if self.info["molecular"].upper() == "NO2":
+            if self.info["molecule"].upper() == "NO2":
                 self.scd_name = (
                     "/PRODUCT/SUPPORT_DATA/DETAILED_RESULTS/scd_no2"
                 )
-            elif self.info["molecular"].upper() == "HCHO":
+            elif self.info["molecule"].upper() == "HCHO":
                 self.scd_name = (
                     "/PRODUCT/SUPPORT_DATA/DETAILED_RESULTS/scd_hcho"
                 )
@@ -1522,14 +1362,14 @@ class amf:
             self.cf_name = "/PRODUCT/SUPPORT_DATA/INPUT_DATA/cloud_fraction"
             self.cp_name = "/PRODUCT/SUPPORT_DATA/INPUT_DATA/cloud_pressure"
             self.cp_units = 1
-            if self.info["molecular"].upper() == "NO2":
+            if self.info["molecule"].upper() == "NO2":
                 self.alb_name = [
                     "/PRODUCT/SUPPORT_DATA/INPUT_DATA/surface_albedo_no2"
                 ]
                 self.ca_name = (
                     "/PRODUCT/SUPPORT_DATA/INPUT_DATA/cloud_albedo_no2"
                 )
-            elif self.info["molecular"].upper() == "HCHO":
+            elif self.info["molecule"].upper() == "HCHO":
                 self.alb_name = [
                     "/PRODUCT/SUPPORT_DATA/INPUT_DATA/surface_albedo_hcho"
                 ]
@@ -1539,7 +1379,7 @@ class amf:
             self.var_name = ""
         elif self.info["file_type"] == 3:  # OMI DOMINO product
             self.wvidx_name = ""
-            if self.info["molecular"].upper() == "NO2":
+            if self.info["molecule"].upper() == "NO2":
                 self.scd_name = (
                     "/HDFEOS/SWATHS/DominoNO2/Data Fields/SlantColumnAmountNO2"
                 )
@@ -1637,12 +1477,12 @@ class amf:
 
     def set_output_variable_name(self):
         """
-        setting all "out_var_name" based on out_file_type and molecular
+        setting all "out_var_name" based on out_file_type and molecule
         from the input information
         and checking if the variables exist in the corresponding file
         """
         if self.info["out_file_type"] == 0:  # HARP format
-            molecular = self.info["molecular"]
+            molecule = self.info["molecule"]
             # geolocation information
             self.out_name["latitude"] = "latitude"
             self.out_name["longitude"] = "longitude"
@@ -1660,11 +1500,11 @@ class amf:
             self.out_name["cloud_albedo"] = "cloud_albedo"
             if self.info["pro_units"] == 0:  # volume mixing ratio
                 self.out_name["profile"] = (
-                    molecular + "_volume_mixing_ratio_apriori"
+                    molecule + "_volume_mixing_ratio_apriori"
                 )
             elif self.info["pro_units"] == 1:  # columne number density
                 self.out_name["profile"] = (
-                    molecular + "_column_number_density_apriori"
+                    molecule + "_column_number_density_apriori"
                 )
             self.out_name["temperature"] = "temperature"
             self.out_name["pressure"] = "pressure"
@@ -1673,26 +1513,26 @@ class amf:
             # setting amf variable
             if self.info["amftrop_flag"]:
                 self.out_name["amf"] = [
-                    molecular + "_column_number_density_amf",
-                    "tropospheric_" + molecular + "_column_number_density_amf",
+                    molecule + "_column_number_density_amf",
+                    "tropospheric_" + molecule + "_column_number_density_amf",
                     "stratospheric_"
-                    + molecular
+                    + molecule
                     + "_column_number_density_amf",
                 ]
             else:
                 self.out_name["amf"] = [
-                    molecular + "_column_number_density_amf"
+                    molecule + "_column_number_density_amf"
                 ]
             self.out_name["averaging_kernel"] = (
-                molecular + "_column_number_density_avk"
+                molecule + "_column_number_density_avk"
             )
             # if applying cloud correction in AMF, then save
             # cloud_radiance_fraction, otherwise, save cloud fraction.
             self.out_name["cloud_radiance_fraction"] = "cloud_fraction"
-            self.out_name["scd"] = molecular + "_slant_column_number_density"
-            self.out_name["vcd"] = molecular + "_column_number_density"
+            self.out_name["scd"] = molecule + "_slant_column_number_density"
+            self.out_name["vcd"] = molecule + "_column_number_density"
             self.out_name["vcdtrop"] = (
-                "tropospheric_" + molecular + "_column_number_density"
+                "tropospheric_" + molecule + "_column_number_density"
             )
             # not available: averaging_kernel_clr, other_variable,
             #    amf_geo, amf_clr, amf_cld
@@ -1729,7 +1569,7 @@ class amf:
             self.out_name[
                 "surface_pressure"
             ] = "/PRODUCT/SUPPORT_DATA/INPUT_DATA/surface_pressure"
-            if self.info["molecular"].upper() == "NO2":
+            if self.info["molecule"].upper() == "NO2":
                 self.out_name["surface_albedo"] = [
                     "/PRODUCT/SUPPORT_DATA/INPUT_DATA/"
                     "surface_albedo_nitrogendioxide_window"
@@ -1777,7 +1617,7 @@ class amf:
                 ] = "/PRODUCT/nitrogendioxide_tropospheric_column"
                 # not availabe: amf_geo, averaging_kernel_clr, pressure,
                 # temperature
-            elif self.info["molecular"].upper() == "HCHO":
+            elif self.info["molecule"].upper() == "HCHO":
                 self.out_name["surface_albedo"] = [
                     "/PRODUCT/SUPPORT_DATA/INPUT_DATA/surface_albedo"
                 ]
@@ -1822,7 +1662,7 @@ class amf:
                 self.out_name[
                     "vcdtrop"
                 ] = "/PRODUCT/formaldehyde_tropospheric_vertical_column"
-            elif self.info["molecular"].upper() == "SO2":
+            elif self.info["molecule"].upper() == "SO2":
                 self.out_name["surface_albedo"] = [
                     "/PRODUCT/SUPPORT_DATA/INPUT_DATA/surface_albedo_328nm",
                     "",
@@ -1910,7 +1750,7 @@ class amf:
             self.out_name[
                 "surface_pressure"
             ] = "/PRODUCT/SUPPORT_DATA/INPUT_DATA/surface_pressure"
-            if self.info["molecular"].upper() == "NO2":
+            if self.info["molecule"].upper() == "NO2":
                 self.out_name["amf"] = [
                     "/PRODUCT/amf_total",
                     "/PRODUCT/amf_trop",
@@ -1941,7 +1781,7 @@ class amf:
                 self.out_name["vcdtrop"] = (
                     "/PRODUCT/tropospheric_hcho_vertical_column"
                 )
-            elif self.info["molecular"].upper() == "HCHO":
+            elif self.info["molecule"].upper() == "HCHO":
                 self.out_name["amf"] = ["/PRODUCT/amf_trop", "", ""]
                 self.out_name["amf_clr"] = [
                     "",
@@ -1968,13 +1808,16 @@ class amf:
         # elif self.info["out_file_type"] == 4:  # GOME-2 operational format\
 
     def check_variable(self):
+        
+        verbose = self.info["verbose"]
+        
         # check input/output variable settings
 
         # check input information
         # 1.0 copy default variables
         # if variable name is not defined in configuration file or command line
         # argument, then it will be copied from default settings based on
-        # molecular and sensors.
+        # molecule and sensors.
         if self.info["file_type"] in [0, 1, 2, 3, 4]:
             if len(self.info["wvidx_name"]) > 0:
                 self.wvidx_name = self.info["wvidx_name"]
@@ -2076,6 +1919,46 @@ class amf:
                 self.ca_name = self.info["ca_name"]
             else:
                 self.info["ca_name"] = self.ca_name
+            if len(self.info["pro_name"]) > 0:
+                self.pro_name = self.info["pro_name"]
+            else:
+                self.info["pro_name"] = self.pro_name
+            if self.info["pro_units"] > 0:
+                self.pro_units = self.info["pro_units"]
+            else:
+                self.info["pro_units"] = self.pro_units
+            if len(self.info["tpro_name"]) > 0:
+                self.tpro_name = self.info["tpro_name"]
+            else:
+                self.info["tpro_name"] = self.tpro_name
+            if self.info["tpro_units"] > 0:
+                self.tpro_units = self.info["tpro_units"]
+            else:
+                self.info["tpro_units"] = self.tpro_units
+            if len(self.info["tropopause_name"]) > 0:
+                self.tropopause_name = self.info["tropopause_name"]
+            else:
+                self.info["tropopause_name"] = self.tropopause_name
+            if self.info["tropopause_mode"] > 0:
+                self.tropopause_mode = self.info["tropopause_mode"]
+            else:
+                self.info["tropopause_mode"] = self.tropopause_mode
+            if len(self.info["pro_sp_name"]) > 0:
+                self.pro_sp_name = self.info["pro_sp_name"]
+            else:
+                self.info["pro_sp_name"] = self.pro_sp_name
+            if self.info["pro_sp_units"] > 0:
+                self.pro_sp_units = self.info["pro_sp_units"]
+            else:
+                self.info["pro_sp_units"] = self.pro_sp_units
+            if self.info["pro_grid_mode"] > 0:
+                self.pro_grid_mode = self.info["pro_grid_mode"]
+            else:
+                self.info["pro_grid_mode"] = self.pro_grid_mode
+            if len(self.info["pro_grid_name"]) > 0:
+                self.pro_grid_name = self.info["pro_grid_name"]
+            else:
+                self.info["pro_grid_name"] = self.pro_grid_name
             if len(self.info["var_name"]) > 0:
                 self.var_name = self.info["var_name"]
             else:
@@ -2092,11 +1975,14 @@ class amf:
             assert self.info[
                 "intens_name"
             ], "intens_name is not set when cf_flag=True."
-        # check if scd_name is set when bc_flag or vcd_flag=True.
-        if self.info["bc_flag"] | self.info["vcd_flag"]:
+        # check if scd_name is set when bc_flag/sts_flag/vcd_flag=True.
+        if (
+            self.info["bc_flag"] | self.info["sts_flag"] |
+            self.info["vcd_flag"]
+        ):
             assert self.info[
                 "scd_name"
-            ], "scd_name is not set when bc_flag or vcd_flag=True."
+            ], "scd_name is not set when bc_flag/sts_flag/vcd_flag=True."
         # define raa_mode is in the range [0,1]
         assert self.info["raa_mode"] in [
             0,
@@ -2241,29 +2127,29 @@ class amf:
                     "alb_time_name"
                 ], "alb_time_name is not set when alb_time_mode>=2"
             # check albedo wavelength
-            # if not set, then albwv = wv
-            if len(self.info["albwv"]) == 0:
-                self.info["albwv"] = self.info["wavelength"]
+            # if not set, then albwvs = wv
+            if len(self.info["albwvs"]) == 0:
+                self.info["albwvs"] = self.info["wavelength"]
             # if size=1, then assume albedo from the same wavelength for
             # all wavelength AMF calculation
-            elif len(self.info["albwv"]) == 1:
-                self.info["albwv"] = self.info["albwv"] * self.nwv
+            elif len(self.info["albwvs"]) == 1:
+                self.info["albwvs"] = self.info["albwvs"] * self.nwv
             assert (
-                len(self.info["albwv"]) == self.nwv
-            ), "size of albwv is not 1 or size of wavelength"
+                len(self.info["albwvs"]) == self.nwv
+            ), "size of albwvs is not 1 or size of wavelength"
             # if alb_wv_name is set, then wavelength diemension is included in
             # albedo file
-            # otherwise, albwv is not used.
+            # otherwise, albwvs is not used.
             if len(self.info["alb_wv_name"]) > 0:
                 # check albedo wavelength range between 300 and 800nm
-                albwv = np.array(self.info["albwv"])
+                albwvs = np.array(self.info["albwvs"])
                 assert all(
-                    (albwv >= 300.0) & (albwv <= 800.0)
-                ), "albwv is out of range -- between [300,800]nm"
+                    (albwvs >= 300.0) & (albwvs <= 800.0)
+                ), "albwvs is out of range -- between [300,800]nm"
             else:
-                if self.verbose & (self.nwv > 1):
+                if verbose & (self.nwv > 1):
                     print(
-                        "warning: alb_wv_name is not set, AMF calculation "
+                        "Warning: alb_wv_name is not set, AMF calculation "
                         "uses the same albedo for all wavelengths."
                     )
             # for BRDF case, only calculate single wavelength
@@ -2365,9 +2251,9 @@ class amf:
         # if amfgeo_flag=False, then out_flag[amf_geo]=False
         if not self.info["amfgeo_flag"]:
             if self.out_flag["amf_geo"]:
-                if self.verbose:
+                if verbose:
                     print(
-                        "warning: can not output amf_geo when amfgeo_flag"
+                        "Warning: can not output amf_geo when amfgeo_flag"
                         "=False, set out_var_flag[amf_geo]=False"
                     )
                 self.out_flag["amf_geo"] = False
@@ -2375,17 +2261,17 @@ class amf:
         # if amftrop_flag=False, then out_flag[vcdtrop/tropopause]=False
         if not self.info["amftrop_flag"]:
             if self.out_flag["vcdtrop"]:
-                if self.verbose:
+                if verbose:
                     print(
-                        "warning: can not output vcd when amftrop_flag=False,"
+                        "Warning: can not output vcd when amftrop_flag=False,"
                         " set out_var_flag[vcdtrop]=False"
                     )
                 self.out_flag["vcdtrop"] = False
                 self.out_name["vcdtrop"] = ""
             if self.out_flag["tropopause"]:
-                if self.verbose:
+                if verbose:
                     print(
-                        "warning: can not output tropopause when amftrop_flag"
+                        "Warning: can not output tropopause when amftrop_flag"
                         "=False, set out_var_flag[tropopause]=False"
                     )
                 self.out_flag["tropopause"] = False
@@ -2393,17 +2279,17 @@ class amf:
         # if vcd_flag == False, then out_flag[vcd/vcdtrop]=False
         if not self.info["vcd_flag"]:
             if self.out_flag["vcd"]:
-                if self.verbose:
+                if verbose:
                     print(
-                        "warning: can not output vcd when vcd_flag=False,"
+                        "Warning: can not output vcd when vcd_flag=False,"
                         " set out_var_flag[vcd]=False"
                     )
                 self.out_flag["vcd"] = False
                 self.out_name["vcd"] = ""
             if self.out_flag["vcdtrop"]:
-                if self.verbose:
+                if verbose:
                     print(
-                        "warning: can not output vcdtrop when vcd_flag=False,"
+                        "Warning: can not output vcdtrop when vcd_flag=False,"
                         " set out_var_flag[vcdtrop]=False"
                     )
                 self.out_flag["vcdtrop"] = False
@@ -2412,25 +2298,25 @@ class amf:
         # out_flag[cloud_pressure/cloud_albedo/cloud_radiance_fraction]=False
         if not self.info["cldcorr_flag"]:
             if self.out_flag["cloud_pressure"]:
-                if self.verbose:
+                if verbose:
                     print(
-                        "warning: can not output cp when cldcorr_flag=False,"
+                        "Warning: can not output cp when cldcorr_flag=False,"
                         " set out_var_flag[cloud_pressure]=False"
                     )
                 self.out_flag["cloud_pressure"] = False
                 self.out_name["cloud_pressure"] = ""
             if self.out_flag["cloud_albedo"]:
-                if self.verbose:
+                if verbose:
                     print(
-                        "warning: can not output ca when cldcorr_flag=False,"
+                        "Warning: can not output ca when cldcorr_flag=False,"
                         " set out_var_flag[cloud_albedo]=False"
                     )
                 self.out_flag["cloud_albedo"] = False
                 self.out_name["cloud_albedo"] = ""
             if self.out_flag["cloud_radiance_fraction"]:
-                if self.verbose:
+                if verbose:
                     print(
-                        "warning: can not output crf when cldcorr_flag=False,"
+                        "Warning: can not output crf when cldcorr_flag=False,"
                         " set out_var_flag[cloud_radiance_fraction]=False"
                     )
                 self.out_flag["cloud_radiance_fraction"] = False
@@ -2439,9 +2325,9 @@ class amf:
         # out_flag[cloud_fraction]=False
         if (not self.info["cldcorr_flag"]) & (not self.info["cf_flag"]):
             if self.out_flag["cloud_fraction"]:
-                if self.verbose:
+                if verbose:
                     print(
-                        "warning: can not output cf when cldcorr_flag=False"
+                        "Warning: can not output cf when cldcorr_flag=False"
                         " and cf_flag=False,"
                         " set out_var_flag[cloud_fraction]=False"
                     )
@@ -2453,9 +2339,9 @@ class amf:
             keys = ["amf_geo", "amf_clr", "amf_cld", "averaging_kernel_clr"]
             for key in keys:
                 if self.out_flag[key]:
-                    if self.verbose:
+                    if verbose:
                         print(
-                            "warning: out_var_name[" + key + "] is not "
+                            "Warning: out_var_name[" + key + "] is not "
                             "standard output for HARP format"
                             )
             # if both cloud_fraction/cloud_radiance_fraction are set
@@ -2463,9 +2349,9 @@ class amf:
             if self.info["cldcorr_flag"]:
                 if self.out_flag["cloud_fraction"]:
                     if self.out_flag["cloud_radiance_fraction"]:
-                        if self.verbose:
+                        if verbose:
                             print(
-                                "warning: can not output both cloud_fraction"
+                                "Warning: can not output both cloud_fraction"
                                 " and cloud_radiance_fraction for HARP format,"
                                 " set out_var_flag[cloud_fraction]=False"
                             )
@@ -2483,25 +2369,25 @@ class amf:
             ]
             for key in keys:
                 if self.out_flag[key]:
-                    if self.verbose:
+                    if verbose:
                         print(
-                            "warning: out_var_name[" + key + "] is not "
+                            "Warning: out_var_name[" + key + "] is not "
                             "standard output for TROPOMI format"
                         )
                     self.out_flag[key] = False
                     self.out_name[key] = ""
             # special parameter for individual species
-            if self.info["molecular"].upper() == "NO2":
+            if self.info["molecule"].upper() == "NO2":
                 keys = ["profile", "other_variable"]
-            elif self.info["molecular"].upper() == "HCHO":
+            elif self.info["molecule"].upper() == "HCHO":
                 keys = ["scd", "vcd", "other_variable"]
-            elif self.info["molecular"].upper() == "SO2":
+            elif self.info["molecule"].upper() == "SO2":
                 keys = ["scd", "vcd"]
             for key in keys:
                 if self.out_flag[key]:
-                    if self.verbose:
+                    if verbose:
                         print(
-                            "warning: out_var_name[" + key + "] is not "
+                            "Warning: out_var_name[" + key + "] is not "
                             "standard output for TROPOMI format"
                         )
                     self.out_flag[key] = False
@@ -2521,23 +2407,23 @@ class amf:
             ]
             for key in keys:
                 if self.out_flag[key]:
-                    if self.verbose:
+                    if verbose:
                         print(
-                            "warning: out_var_name[" + key + "] is not "
+                            "Warning: out_var_name[" + key + "] is not "
                             "standard output for QA4ECV format"
                         )
                     self.out_flag[key] = False
                     self.out_name[key] = ""
             # special parameter for individual species
-            if self.info["molecular"].upper() == "NO2":
+            if self.info["molecule"].upper() == "NO2":
                 keys = ["profile"]
-            elif self.info["molecular"].upper() == "HCHO":
+            elif self.info["molecule"].upper() == "HCHO":
                 keys = ["amf_geo", "vcd"]
             for key in keys:
                 if self.out_flag[key]:
-                    if self.verbose:
+                    if verbose:
                         print(
-                            "warning: out_var_name[" + key + "] is not "
+                            "Warning: out_var_name[" + key + "] is not "
                             "standard output for QA4ECV format"
                         )
                     self.out_flag[key] = False
@@ -2596,6 +2482,7 @@ class amf:
         pro_file=[],
         var_file=[],
     ):
+        verbose = self.info["verbose"]
         # initialized extra variables
         # lat/lon/latcor/loncor
         lat = np.array([])
@@ -2615,7 +2502,8 @@ class amf:
         scd = np.array([])
         intens = np.array([])
         # only set when alb_mode/pro_mode>0
-        time = np.array([])
+        date = dt.datetime(1900, 1, 1)
+        timedelta = np.array([])
         # wavelength index for AMF calculation
         wvidx = np.array([])
         # th data when spcorr_flag is True
@@ -2641,15 +2529,16 @@ class amf:
         tropopause = np.array([])  # when amftrop_flag is True
         th1 = np.array([])  # th for profile data when spcorr_flag is True
         var = []
+        
 
         # read inp_file
-        fid = nc.Dataset(inp_file, "r")
+        fid = Dataset(inp_file, "r")
         # dimension of the variable (it should be the same for all)
         dim = fid[self.sza_name][:].shape
         size = fid[self.sza_name][:].size
         if len(dim) >= 2:
             if dim == dim[::-1]:
-                if self.verbose:
+                if verbose:
                     print(
                         "Warning: should be sure that the dimension from "
                         "inp_file/th_file/alb_file/pro_file is consistent, "
@@ -2673,7 +2562,7 @@ class amf:
                 fid[self.raa_name[0]].dimensions == dimname
             ), "RAA dimension is incorrect"
             raa = amf_func.masked(fid[self.raa_name[0]][:])
-            raa[(raa > 360) | (raa < -360)] = np.nan
+            #raa[(raa > 360) | (raa < -360)] = np.nan
         else:
             # if two "raa_name", it will be saa and vaa
             assert (
@@ -2684,14 +2573,14 @@ class amf:
             ), "RAA[1] dimension is incorrect"
             saa = amf_func.masked(fid[self.raa_name[0]][:])
             vaa = amf_func.masked(fid[self.raa_name[1]][:])
-            saa[(saa > 360) | (saa < -360)] = np.nan
-            vaa[(vaa > 360) | (vaa < -360)] = np.nan
+            #saa[(saa > 360) | (saa < -360)] = np.nan
+            #vaa[(vaa > 360) | (vaa < -360)] = np.nan
             raa = np.abs(saa - vaa)
             saa = saa.ravel()
             vaa = vaa.ravel()
         # ND -> 1D
         raa = raa.ravel()
-
+        
         # if raa_mode = 0 then use 180-raa
         if self.raa_mode == 0:
             raa = np.abs(180 - raa) % 360
@@ -2699,7 +2588,7 @@ class amf:
             raa = np.abs(raa) % 360
         # raa should be in the range of [0, 180]
         raa = np.where(raa > 180, 360 - raa, raa)
-
+        
         # Longitude / Latitude
         assert (
             fid[self.lon_name].dimensions == dimname
@@ -2735,10 +2624,10 @@ class amf:
                     latcor = latcor.reshape(4, -1).T
                 else:
                     assert False, "latcor dimension is incorrect"
-            except IndexError:
-                if self.verbose:
+            except:
+                if verbose:
                     print(
-                        "warning: can not read latcor data (latcor name is "
+                        "Warning: can not read latcor data (latcor name is "
                         "incorrect or does not exist)"
                     )
         if self.info["out_var_flag"]["longitudecorners"]:
@@ -2757,14 +2646,17 @@ class amf:
                     loncor = loncor.reshape(4, -1).T
                 else:
                     assert False, "loncor dimension is incorrect"
-            except IndexError:
-                if self.verbose:
+            except:
+                if verbose:
                     print(
-                        "warning: can not read loncor data (loncor name is "
+                        "Warning: can not read loncor data (loncor name is "
                         "incorrect or does not exist)"
                     )
-        # scd (only if bc_flag/vcd_flag=True)
-        if self.info["bc_flag"] | self.info["vcd_flag"]:
+        # scd (only if bc_flag/sts_flag/vcd_flag=True)
+        if (
+            self.info["bc_flag"] | self.info["sts_flag"] |
+            self.info["vcd_flag"]
+        ):
             scd = amf_func.masked(fid[self.scd_name][:])
             scd_dimname = fid[self.scd_name].dimensions
             if scd_dimname == dimname:
@@ -2810,7 +2702,6 @@ class amf:
                     (lon <= self.info["lon_max"])
                 )
             )
-
         # cosine(SZA/VZA)
         cossza = np.cos(np.radians(sza))
         cosvza = np.cos(np.radians(vza))
@@ -2829,7 +2720,7 @@ class amf:
                     ustr = fid[self.time_name].units
                     ustr = ustr.split()[-1].split("-")
                     self.time_reference = [int(u) for u in ustr]
-                except IndexError:
+                except:
                     pass
             # date is from the first measurement
             # timedelta0 is fraction of day since date
@@ -2883,7 +2774,7 @@ class amf:
         # read th file
         # only when spcorr_flag=True & th_mode=0
         if (self.info["spcorr_flag"]) & (self.info["th_mode"] == 0):
-            fid = nc.Dataset(th_file, "r")
+            fid = Dataset(th_file, "r")
             th = amf_func.masked(fid[self.th_name][:])
             assert (
                 th.shape == dim
@@ -2900,7 +2791,7 @@ class amf:
                         self.th_units = 0
                     else:
                         assert False, "th_name units is incorrect"
-                except IndexError:
+                except:
                     pass
             th = amf_func.height_convert(th, self.th_units)
             # close th_file
@@ -2908,7 +2799,7 @@ class amf:
 
         # read alb file
         if self.info["alb_mode"] == 0:
-            fid = nc.Dataset(alb_file, "r")
+            fid = Dataset(alb_file, "r")
             # for Lambertian surface
             if self.nalb == 1:
                 alb = [np.full((self.nwv, size), np.nan)]
@@ -2938,9 +2829,9 @@ class amf:
                         )
                         alb[0][:] = alb0.reshape(-1, self.nwv).T
                         if alb0.shape == alb0.shape[::-1]:
-                            if self.verbose:
+                            if verbose:
                                 print(
-                                    "warning: doulbe check surface albedo "
+                                    "Warning: doulbe check surface albedo "
                                     "dimension (last dim is wavelength?)"
                                 )
                     elif alb0.shape[1:] == dim:
@@ -2977,9 +2868,9 @@ class amf:
                                 * self.alb_factor[ialb]
                             )
                         if alb0.shape == alb0.shape[::-1]:
-                            if self.verbose:
+                            if verbose:
                                 print(
-                                    "warning: doulbe check surface albedo "
+                                    "Warning: doulbe check surface albedo "
                                     "dimension (last dim is albedo variale?)"
                                 )
                     elif alb0.shape[1:] == dim:
@@ -3001,7 +2892,7 @@ class amf:
 
         # read cld file
         if self.info["cldcorr_flag"]:
-            fid = nc.Dataset(cld_file, "r")
+            fid = Dataset(cld_file, "r")
             cf = amf_func.masked(fid[self.cf_name][:])
             assert cf.shape == dim, "cf dimension is incorrect"
             cf = cf.ravel()
@@ -3013,13 +2904,13 @@ class amf:
             if (self.info["file_type"] == 0) & (cld_file == inp_file):
                 try:
                     ustr = fid[self.cp_name].units
-                    if ustr == "hPa":
+                    if ustr.lower() == "hpa":
                         self.cp_units = 1
-                    elif ustr == "Pa":
+                    elif ustr.lower() == "pa":
                         self.cp_units = 0
                     else:
                         assert False, "cloud pressure units is incorrect"
-                except IndexError:
+                except:
                     pass
             cp = amf_func.pres_convert(cp, self.cp_units)
             # if ca_name is not set, ca=0.8
@@ -3027,16 +2918,17 @@ class amf:
             try:
                 ca = amf_func.masked(fid[self.ca_name][:])
                 assert ca.shape == dim, "ca dimension is incorrect"
-            except IndexError:
+            except:
                 ca = np.full(dim, 0.8)
                 if self.info["file_type"] > 0:
-                    if self.verbose:
+                    if verbose:
                         print(
                             "ca_name is not set or set it correctly,"
                             "and put cloud_albedo=0.8 for all cases"
                         )
             ca = ca.ravel()
             ca[np.isnan(cp)] = np.nan
+            ca[cf==0.0] = 0.0
             # correction for cf and ca when cld_mode=1
             if self.info["cld_mode"] == 1:
                 cf = cf * ca / 0.8
@@ -3044,10 +2936,10 @@ class amf:
                 ca[np.isnan(cf)] = np.nan
             # close cld_file
             fid.close()
-
+            
         # read profile
         if self.info["pro_mode"] == 0:
-            fid = nc.Dataset(pro_file, "r")
+            fid = Dataset(pro_file, "r")
             # surface pressure
             dimname1 = fid[self.info["pro_sp_name"]].dimensions
             # if inp_file is HARP format
@@ -3061,7 +2953,7 @@ class amf:
                         self.info["pro_sp_units"] = 0
                     else:
                         assert False, "cloud pressure units is incorrect"
-                except IndexError:
+                except:
                     pass
             sp = amf_func.masked(fid[self.info["pro_sp_name"]][:])
             assert sp.shape == dim, "sp dimension is incorrect"
@@ -3112,7 +3004,7 @@ class amf:
                             self.info["pro_th_units"] = 0
                         else:
                             assert False, "cloud pressure units is incorrect"
-                    except IndexError:
+                    except:
                         pass
                 th1 = amf_func.masked(fid[self.info["pro_th_name"]][:])
                 th1 = amf_func.height_convert(th1, self.info["pro_th_units"])
@@ -3191,6 +3083,61 @@ class amf:
                 assert (
                     amf_func.monotonic(pres) == 1
                 ), "pressure profile is not monotonicity decreasing"
+            # pro_mode=2: layer boundary of pressure coefficients
+            elif self.info["pro_grid_mode"] == 2:
+                pro_pai = amf_func.masked(
+                    fid[self.info["pro_grid_name"][0]][:]
+                )
+                pro_pbi = amf_func.masked(
+                    fid[self.info["pro_grid_name"][1]][:]
+                )
+                pro_pai = amf_func.pres_convert(
+                    pro_pai, self.info["pro_sp_units"]
+                )
+                assert (
+                    pro_pai.size == pro_pbi.size == nlevel
+                ), "pa/pb coeffs and profile layer is inconsistent"
+                if amf_func.monotonic(pro_pbi) in [2, 4]:
+                    pro_pai = pro_pai[::-1]
+                    pro_pbi = pro_pbi[::-1]
+                    pro = pro[:, ::-1]
+                    if self.info["tcorr_flag"]:
+                        tpro = tpro[:, ::-1]
+                assert (pro_pai[0] == 0) & (pro_pbi[0] == 1), (
+                    "pa/pb is incorrect (pa[0]=0, pb[0]=1"
+                    )
+                pro_pam = (pro_pai[:-1] + pro_pai[1:]) / 2.
+                pro_pbm = (pro_pbi[:-1] + pro_pbi[1:]) / 2.
+                pres = np.outer(np.ones(dim), pro_pai) + np.outer(sp, pro_pbi)
+                assert (
+                    amf_func.monotonic(pres) == 1
+                ), "pressure profile is not monotonicity decreasing"
+            # pro_mode=3: layer boundary of pressure grid
+            elif self.info["pro_grid_mode"] == 3:
+                pres = amf_func.masked(fid[self.info["pro_grid_name"][0]][:])
+                pres_dimname = fid[self.info["pro_grid_name"][0]].dimensions
+                pres = amf_func.pres_convert(pres, self.info["pro_sp_units"])
+                if pres_dimname[:-1] == dimname1:
+                    assert (
+                        pres1.shape[-1] == nlevel
+                    ), "pressure profile dimension is incorrect"
+                    pres = pres.reshape(-1, nlevel)
+                elif pres_dimname[1:] == dimname1:
+                    assert (
+                        pres.shape[0] == nlevel
+                    ), "pressure profile dimension is incorrect"
+                    pres = pres.reshape(nlevel, -1).T
+                else:
+                    assert False, "pressure profile dimension is incorrect"
+                if amf_func.monotonic(pres) == 2:
+                    pres = pres[:, ::-1]
+                    pro = pro[:, ::-1]
+                    if self.info["tcorr_flag"]:
+                        tpro = tpro[:, ::-1]
+                else:
+                    assert (
+                        amf_func.monotonic(pres) == 1
+                    ), "pressure profile is not monotonicity decreasing"
             # tropopause
             if self.info["amftrop_flag"]:
                 tropopause = amf_func.masked(
@@ -3209,16 +3156,17 @@ class amf:
                     tropopause = amf_func.pres_convert(
                         tropopause, self.info["pro_sp_units"]
                     )
-                    tropopause[~tropopause.mask] = np.nanargmin(
+                    tropopause[~np.isnan(tropopause)] = np.nanargmin(
                         np.abs(
-                            pres[~tropopause.mask, :]
+                            pres[~np.isnan(tropopause), :]
                             - np.outer(
-                                tropopause[~tropopause.mask], np.ones(nlevel)
+                                tropopause[~np.isnan(tropopause)],
+                                np.ones(nlevel)
                             )
                         ),
-                        axis=1,
+                        axis=1
                     )
-                tropopause[tropopause.mask] = -1
+                tropopause[np.isnan(tropopause)] = -127
                 tropopause = np.int8(tropopause)
                 assert (
                     np.count_nonzero(tropopause == 0) == 0
@@ -3227,7 +3175,7 @@ class amf:
             fid.close()
         # read other variables
         if var_file:
-            fid = nc.Dataset(var_file, "r")
+            fid = Dataset(var_file, "r")
             for var_name in self.info["var_name"]:
                 var0 = amf_func.masked(fid[var_name][:])
                 assert var0.shape == dim, (
@@ -3236,6 +3184,7 @@ class amf:
                 var.append(var0.ravel())
             # close var_file
             fid.close()
+        
         # output (input information)
         data = {
             "dim": dim,
@@ -3282,7 +3231,8 @@ class amf:
         # radiance: wv x sp x SZA x VZA x RAA x albs x others
         # box-AMF: wv x pre x sp x SZA x VZA x RAA x albs x others
         # if the order of dimension is not same, and then will transpose it.
-        fid = nc.Dataset(lut_file, "r")
+        verbose = self.info["verbose"]
+        fid = Dataset(lut_file, "r")
         # intensity and box-AMF in LUT
         rad0 = fid[lut_vars[0]][:]
         bamf0 = fid[lut_vars[1]][:]
@@ -3342,8 +3292,8 @@ class amf:
             var[0] = np.array(wv)  # wavelength is replaced
         # LUT without wavelength dimension
         else:
-            if (nwv > 1) & self.verbose:
-                print("warning: no wavlength dimension in box-AMF LUT, AMF "
+            if (nwv > 1) & verbose:
+                print("Warning: no wavlength dimension in box-AMF LUT, AMF "
                       "calculation is the same for all wavelengths")
             rad = np.full((nwv,) + rad0.shape, np.nan)
             bamf = np.full((nwv,) + bamf0.shape, np.nan)
@@ -3401,9 +3351,23 @@ class amf:
         scd = inp["scd"]
         amf = amfres["amf"][0]
         vcd = np.full_like(amfres["amf"][0], np.nan)
-        if self.info["amftrop_flag"]:
+        if self.info["sts_flag"]:
             amftrop = amfres["amf"][1]
             vcdtrop = np.full_like(amfres["amf"][1], np.nan)
+            # remove stratospheric column
+            if self.info["bc_x_name"].lower() == "lat":
+                xdata = inp["lat"]
+            elif self.info["bc_x_name"].lower() == "sza":
+                xdata = inp["sza"]
+            else:
+                xdata = inp["cossza"]
+            f = interp1d(
+                bcres["x"], bcres["y"], bounds_error=False,
+                fill_value="extrapolate"
+                )
+            vcdstrat = f(xdata)
+            amfgeo = amfres["amf_geo"]
+        elif self.info["bc_flag"]:
             # remove background column
             if self.info["bc_x_name"].lower() == "lat":
                 xdata = inp["lat"]
@@ -3411,15 +3375,23 @@ class amf:
                 xdata = inp["sza"]
             else:
                 xdata = inp["cossza"]
-            vcdstrat = np.interp(xdata, bcres["x"], bcres["y"])
-            amfgeo = amfres["amf_geo"]
+            f = interp1d(
+                bcres["x"], bcres["y"], bounds_error=False,
+                fill_value="extrapolate"
+                )
+            scdcor = f(xdata)
+            vcdtrop = np.full_like(amfres["amf"][1], np.nan)
         else:
             vcdtrop = np.array([])
 
         for i in range(self.nwv):
             vcd[i] = scd / amf[i]
             if self.info["amftrop_flag"]:
-                vcdtrop[i] = (scd - vcdstrat * amfgeo) / amftrop[i]
+                if self.info["sts_flag"]:
+                    vcdtrop[i] = (scd - vcdstrat * amfgeo) / amftrop[i]
+                elif self.info["bc_flag"]:
+                    vcdtrop[i] = (scd - scdcor) / amftrop[i]
+
         # output
         result = {"vcd": vcd, "vcdtrop": vcdtrop}
         return result
@@ -3486,7 +3458,8 @@ class amf:
         # check input variables
         self.check_variable()
 
-        if self.verbose:
+        verbose = self.info["verbose"]
+        if verbose:
             print("Reading auxiliary dataset ...")
         # read LUT file
         amflut = self.read_amflut(
@@ -3507,10 +3480,10 @@ class amf:
         # read profile maps if needed
         if self.info["pro_mode"] >= 1:
             prodat = amf_pro.read_prodat(self.info)
-        if self.verbose:
+        if verbose:
             print("Background correction:")
-        # background correction calculation
-        if self.info["bc_flag"]:
+        # background or STS correction calculation
+        if self.info["bc_flag"] | self.info["sts_flag"]:
             bcres = amf_bc.bc(
                 self.inp_file,
                 self.info,
@@ -3522,11 +3495,13 @@ class amf:
             )
             if self.info["bc_test_flag"]:
                 return
-        if self.verbose:
+        else:
+            bcres = []
+        if verbose:
             print("AMF calculation start:")
         # read variables from each inp_file
         for i in range(len(self.inp_file)):
-            if self.verbose:
+            if verbose:
                 print("File: " + self.inp_file[i])
             # read general input information
             inp_file = self.inp_file[i]
@@ -3566,7 +3541,7 @@ class amf:
                 var_file=var_file,
             )
             if np.count_nonzero(inp["idx"]) == 0:
-                if self.verbose:
+                if verbose:
                     print("no valid data for " + self.inp_file[i])
                 continue
             # if th_mode == 1, then calculate terrain height
@@ -3601,7 +3576,7 @@ class amf:
             # calculate AMF
             amfres = amf_cal.cal_amf(self.info, inp, amflut)
             # calcualte vcd and vcdtrop
-            if self.info["bc_flag"] | self.info["vcd_flag"]:
+            if self.info["vcd_flag"]:
                 vcdres = self.cal_vcd(inp, amfres, bcres)
             # copy output data from input variables and AMF result
                 self.copy_output(inp, amfres, vcdres=vcdres)

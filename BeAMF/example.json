@@ -1,11 +1,13 @@
 {
     "settings": {
-        "molecular": "",
+        "verbose": false,
+        "molecule": "",
         "wavelength": [],
         "wv_flag": false,
         "amfgeo_flag": false,
         "amftrop_flag": false,
         "bc_flag": false,
+        "sts_flag": false,
         "cf_flag": false,
         "vcd_flag": false,
         "cldcorr_flag": false,
@@ -13,8 +15,8 @@
         "cldcorr_cfunits": 0,
         "tcorr_flag": true,
         "tcorr_mode": 0,
-        "tcorr_coeffs": [],
-        "tcorr_ref": 0.0,
+        "tcorr_tcoeffs": [],
+        "tcorr_tref": 0.0,
         "spcorr_flag": false,
         "geo_units": 0,
         "sza_min": 0.0,
@@ -32,23 +34,23 @@
             "lut_rad_name": "",
             "lut_amf_name": "",
             "lut_var_name": [],
-            "lut_alb_name": "",
+            "lut_alb_name": [],
             "lut_other_name": []
         },
         "general": {
-            "inp_file": "",
+            "inp_file": [],
             "file_type": 0,
             "wvidx_name": "",
             "scd_name": "",
             "intens_name": "",
+            "lat_name": "",
+            "lon_name": "",
+            "loncor_name": "",
+            "latcor_name": "",
             "sza_name": "",
             "vza_name": "",
             "raa_mode": 0,
             "raa_name": "",
-            "lon_name": "",
-            "lat_name": "",
-            "loncor_name": "",
-            "latcor_name": "",
             "time_mode": 0,
             "time_name": "",
             "time_units": 0,
@@ -61,18 +63,18 @@
             "th_file": [],
             "th_name": "",
             "th_units": 0,
-            "th_lon_name": "",
-            "th_lat_name": ""
+            "th_lat_name": "",
+            "th_lon_name": ""            
         },
         "albedo": {
             "alb_mode": 0,
             "alb_file": [],
             "alb_name": [],
             "alb_factor": [],
+            "alb_time_mode": 0,
+            "alb_time_name": "",
             "alb_lon_name": "",
             "alb_lat_name": "",
-            "alb_time_name": "",
-            "alb_time_mode": 0,
             "alb_wv_name": "",
             "albwv": [],
             "alb_region_flag": false,
@@ -99,22 +101,23 @@
             "pro_th_units": 0,
             "pro_sp_name": "",
             "pro_sp_units": 0,
-            "pro_lon_name": "",
             "pro_lat_name": "",
-            "pro_time_name": "",
+            "pro_lon_name": "",
             "pro_time_mode": 0,
+            "pro_time_name": "",
             "pro_time_reference": [],
             "pro_grid_mode": 0,
-            "pro_grid_name": []
+            "pro_grid_name": [],
+            "pro_region_flag": false
         },
         "var": {
             "var_file": [],
             "var_name": []
         }
     },
-	"bc": {
+    "bc": {
         "bc_lon_lim": [],
-		"bc_lat_lim": [],
+        "bc_lat_lim": [],
         "bc_vza_lim": [],
         "bc_sza_lim": [],
         "bc_x_name": "",
@@ -154,6 +157,7 @@
             "cloud_radiance_fraction": false,
             "averaging_kernel": false,
             "averaging_kernel_clr": false,
+            "scd": false,
             "vcd": false,
             "vcdtrop": false
         },
@@ -185,6 +189,7 @@
             "cloud_radiance_fraction": "",
             "averaging_kernel": "",
             "averaging_kernel_clr": "",
+            "scd": "",
             "vcd": "",
             "vcdtrop": ""
         }

@@ -96,14 +96,19 @@ def bc(files, info, lat_name, lon_name, sza_name, vza_name, scd_name):
         if info["verbose"]:
             print("warning: number of valid data in BC is less than 1000")
 
-    # calculate amfgeo and VCD
-    cossza = np.cos(np.radians(sza))
-    cosvza = np.cos(np.radians(vza))
-    amf_geo = (2 * __r__ + 1) / (
-        np.sqrt((__r__ * cossza) ** 2 + 2 * __r__ + 1)
-        + __r__ * cossza
-    ) + 1 / cosvza
-    ydata = scd / amf_geo
+    # STS correction: based on SCD/AMFgeo
+    if info["sts_flag"]:
+        # calculate amfgeo and VCD
+        cossza = np.cos(np.radians(sza))
+        cosvza = np.cos(np.radians(vza))
+        amf_geo = (2 * __r__ + 1) / (
+            np.sqrt((__r__ * cossza) ** 2 + 2 * __r__ + 1)
+            + __r__ * cossza
+        ) + 1 / cosvza
+        ydata = scd / amf_geo
+    # Background correction: based on SCD
+    else:
+        ydata = scd
 
     # find xdata
     if info["bc_x_name"].lower() == "lat":
@@ -131,10 +136,15 @@ def bc(files, info, lat_name, lon_name, sza_name, vza_name, scd_name):
         )
         plt.plot(xpoint1s, ypoint1s, "-r", lw=1)
         plt.xlabel(info["bc_x_name"])
-        plt.ylabel("initial VCD")
+        if info["sts_flag"]:
+            plt.ylabel("initial VCD")
+            plt.title("STS correction")
+        else:
+            plt.ylabel("initial SCD")
+            plt.title("Background correction")
 
         # remove 1% of data as outliers
-        ylimit = np.percentile(ydata, [0.1, 99.9])
+        ylimit = np.percentile(ydata, [0.5, 99.5])
         plt.ylim(ylimit)
         plt.tight_layout()
         plt.grid(True)
