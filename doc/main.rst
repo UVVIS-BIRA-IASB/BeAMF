@@ -84,8 +84,9 @@ Background correction
 ----------------------
 
 * based on configuration file “harp_hcho_bc.json”.
-*  bc_flag or sts_flag = True: background correction or stratospheric correction based on the reference sector method (sts_flag: data analysis based on SCD/geometric AMF; bc_flag: data analysis based on SCD).
-* inp_file = “./2022/07/01/*.nc”. Background correction is only based on the daily satellite measurement (at least 10 files)
+* bc_flag or sts_flag = True: background correction or stratospheric correction based on the reference sector method (sts_flag: data analysis based on SCD/geometric AMF; bc_flag: data analysis based
+   on SCD).
+*  inp_file = “./2022/07/01/\*.nc”. Background correction is only based on the daily satellite measurement (at least 10 files)
 *  bc_test_flag = True: visualized the fitting results. (if you want to do data process, this flag should be switch off)
 
    
@@ -103,3 +104,9 @@ Background correction
 	  - HCHO_column_number_density_amf
 	  - 1
 	  - amf of hcho
+
+   -
+   
+	  - HCHO_column_number_density_avk
+	  - 1
+	  - vcd of hcho
