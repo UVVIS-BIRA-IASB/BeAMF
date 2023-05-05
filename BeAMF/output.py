@@ -439,7 +439,7 @@ def write_harp(filename, info, flag, name, out):
             os.chmod(fullname, 0o777)
         #    os.remove(fullname)
         # Export the product as a HARP compliant data product.
-        harp.export_product(data, fullname, hdf5_compression=9)
+        harp.export_product(data, fullname,file_format='hdf5', hdf5_compression=6)
 
 
 def write_tropomi(filename, info, flag, name, out):
