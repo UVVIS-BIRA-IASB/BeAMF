@@ -260,8 +260,8 @@ def write_harp(filename, info, flag, name, out):
             "vcdtrop",
         ]
         for key in keys:
-            if flag[key] & len(name[key]) & out[key].size:
-                data[name[key]] = harp.Variable(np.float32(out[key]), ["time"])
+            if flag[key] & (len(name[key]) > 0) & (out[key].size > 0):
+                data[name[key]] = harp.Variable(np.float32(out[key].ravel()), ["time"])
         # latitudecorners/longitudecorners
         keys = ["latitudecorners", "longitudecorners"]
         for key in keys:
