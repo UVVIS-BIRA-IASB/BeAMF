@@ -1,5 +1,3 @@
-# pyproject.toml
-
 [build-system]
 requires = ["setuptools>=45", "setuptools_scm>=6.2"]
 build-backend = "setuptools.build_meta"
@@ -7,5 +5,16 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools_scm]
 write_to = "BeAMF/_version.py"
 
-#[tool.setuptools]
-#py-modules = [BeAMF]
+[project]
+name = "BeAMF" 
+requires-python = ">=3.7"
+dynamic = ["version"]
+dependencies = [
+				 "numpy",
+				 "scipy",
+				 "netCDF4",
+				 "datetime",
+				]
+
+[project.scripts]
+beamf = "BeAMF:cml"
