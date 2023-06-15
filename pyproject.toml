@@ -14,7 +14,8 @@ dependencies = [
 				 "scipy",
 				 "netCDF4",
 				 "datetime",
-				]
+				"matplotlib"
+					]
 
 [project.scripts]
 beamf = "BeAMF:cml"
