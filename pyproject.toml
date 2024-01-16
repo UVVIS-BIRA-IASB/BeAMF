@@ -12,10 +12,8 @@ dynamic = ["version"]
 dependencies = [
 				 "numpy",
 				 "scipy",
-				 "netCDF4",
-				 "datetime",
-				"matplotlib"
-					]
+				 "netCDF4"
+				]
 
 [project.scripts]
 beamf = "BeAMF:cml"

@@ -1,7 +1,5 @@
 import numpy as np
 import netCDF4 as nc
-import matplotlib.pyplot as plt
-
 from . import function as amf_func
 
 
@@ -130,25 +128,26 @@ def bc(files, info, lat_name, lon_name, sza_name, vza_name, scd_name):
             )
 
     if info["bc_test_flag"]:
-        plt.plot(xdata, ydata, ".", markersize=1)
-        plt.plot(
-            xpoint1s[::ratio], ypoint1s[::ratio], "or", lw=1, markersize=4
-        )
-        plt.plot(xpoint1s, ypoint1s, "-r", lw=1)
-        plt.xlabel(info["bc_x_name"])
-        if info["sts_flag"]:
-            plt.ylabel("initial VCD")
-            plt.title("STS correction")
-        else:
-            plt.ylabel("initial SCD")
-            plt.title("Background correction")
+        pass # disabled plotting for command line use only
+        # plt.plot(xdata, ydata, ".", markersize=1)
+        # plt.plot(
+        #     xpoint1s[::ratio], ypoint1s[::ratio], "or", lw=1, markersize=4
+        # )
+        # plt.plot(xpoint1s, ypoint1s, "-r", lw=1)
+        # plt.xlabel(info["bc_x_name"])
+        # if info["sts_flag"]:
+        #     plt.ylabel("initial VCD")
+        #     plt.title("STS correction")
+        # else:
+        #     plt.ylabel("initial SCD")
+        #     plt.title("Background correction")
 
-        # remove 1% of data as outliers
-        ylimit = np.percentile(ydata, [0.5, 99.5])
-        plt.ylim(ylimit)
-        plt.tight_layout()
-        plt.grid(True)
-        plt.show()
+        # # remove 1% of data as outliers
+        # ylimit = np.percentile(ydata, [0.5, 99.5])
+        # plt.ylim(ylimit)
+        # plt.tight_layout()
+        # plt.grid(True)
+        # plt.show()
 
     result = {
         "x": xpoint1s,
