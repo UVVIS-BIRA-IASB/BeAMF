@@ -1,14 +1,12 @@
 [build-system]
-requires = ["setuptools>=45", "setuptools_scm>=6.2"]
+requires = ["setuptools>=45"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools_scm]
-write_to = "BeAMF/_version.py"
 
 [project]
 name = "BeAMF" 
+version = "1.0.2"
 requires-python = ">=3.7"
-dynamic = ["version"]
 dependencies = [
 				 "numpy",
 				 "scipy",
